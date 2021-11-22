@@ -16,6 +16,9 @@ pub const CLOCK_FREQ: usize = 403000000 / 62;
 #[cfg(feature = "board_qemu")]
 pub const CLOCK_FREQ: usize = 12500000;
 
+#[cfg(feature = "board_d1")]
+pub const CLOCK_FREQ: usize = 403000000 / 62;
+
 #[cfg(feature = "board_qemu")]
 pub const MMIO: &[(usize, usize)] = &[
     (0x10001000, 0x1000),
@@ -39,4 +42,11 @@ pub const MMIO: &[(usize, usize)] = &[
     (0x5200_0000, 0x1000),      /* SPI0      */
     (0x5300_0000, 0x1000),      /* SPI1      */
     (0x5400_0000, 0x1000),      /* SPI2      */
+];
+
+#[cfg(feature = "board_d1")]
+pub const MMIO: &[(usize, usize)] = &[
+    (0x0200_0000,0x2000), /* GPIO & CCU*/
+    (0x0250_0000,0x1000), /* UART 0-3 */
+    (0x0402_0000,0x3000)  /* SMHC 0-3 */
 ];

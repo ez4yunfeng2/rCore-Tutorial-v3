@@ -1,5 +1,6 @@
 mod virtio_blk;
 mod sdcard;
+mod sdcard_d1;
 
 use lazy_static::*;
 use alloc::sync::Arc;
@@ -10,6 +11,9 @@ type BlockDeviceImpl = virtio_blk::VirtIOBlock;
 
 #[cfg(feature = "board_k210")]
 type BlockDeviceImpl = sdcard::SDCardWrapper;
+
+#[cfg(feature = "board_d1")]
+type BlockDeviceImpl = sdcard_d1::SDCardWrapper;
 
 lazy_static! {
     pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = Arc::new(BlockDeviceImpl::new());

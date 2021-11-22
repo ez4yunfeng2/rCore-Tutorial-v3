@@ -90,6 +90,13 @@ ifeq ($(BOARD),qemu)
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+else ifeq($(BOARD),d1)
+	@cp $(BOOTLOADER) $(BOOTLOADER).copy
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=1k seek=128
+	@mv $(BOOTLOADER).copy $(KERNEL_BIN)
+	xfel ddr ddr3
+	xfel write 0x40000000 $(KERNEL_BIN)
+	xfel exec 0x40000000
 else
 	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy

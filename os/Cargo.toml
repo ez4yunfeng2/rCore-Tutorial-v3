@@ -17,7 +17,8 @@ k210-pac = { git = "https://github.com/wyfcyx/k210-pac" }
 k210-hal = { git = "https://github.com/wyfcyx/k210-hal" }
 k210-soc = { git = "https://github.com/wyfcyx/k210-soc" }
 easy-fs = { path = "../easy-fs" }
-
+nezha_sdc = { git = "https://github.com/ez4yunfeng2/nezha-sdc.git", rev = "03180f2"}
 [features]
 board_qemu = []
 board_k210 = []
+board_d1 = []
