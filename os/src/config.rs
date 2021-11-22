@@ -17,7 +17,7 @@ pub const CLOCK_FREQ: usize = 403000000 / 62;
 pub const CLOCK_FREQ: usize = 12500000;
 
 #[cfg(feature = "board_d1")]
-pub const CLOCK_FREQ: usize = 403000000 / 62;
+pub const CLOCK_FREQ: usize = 24000000;
 
 #[cfg(feature = "board_qemu")]
 pub const MMIO: &[(usize, usize)] = &[
