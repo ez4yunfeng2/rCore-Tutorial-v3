@@ -1,27 +1,17 @@
 mod context;
 
-use riscv::register::{
-    mtvec::TrapMode,
-    stvec,
-    scause::{
-        self,
-        Trap,
-        Exception,
-        Interrupt,
-    },
-    stval,
-    sie,
-};
+use crate::config::TRAMPOLINE;
 use crate::syscall::syscall;
 use crate::task::{
-    exit_current_and_run_next,
+    current_trap_cx, current_trap_cx_user_va, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
-    current_user_token,
-    current_trap_cx,
-    current_trap_cx_user_va,
 };
-use crate::timer::{set_next_trigger, check_timer};
-use crate::config::TRAMPOLINE;
+use crate::timer::{check_timer, set_next_trigger};
+use riscv::register::{
+    mtvec::TrapMode,
+    scause::{self, Exception, Interrupt, Trap},
+    sie, stval, stvec,
+};
 
 global_asm!(include_str!("trap.S"));
 
@@ -42,7 +32,9 @@ fn set_user_trap_entry() {
 }
 
 pub fn enable_timer_interrupt() {
-    unsafe { sie::set_stimer(); }
+    unsafe {
+        sie::set_stimer();
+    }
 }
 
 #[no_mangle]
@@ -56,17 +48,17 @@ pub fn trap_handler() -> ! {
             let mut cx = current_trap_cx();
             cx.sepc += 4;
             // get system call return value
-            let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
+            let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12],cx.x[13],cx.x[14],cx.x[15]]);
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
             cx.x[10] = result as usize;
         }
-        Trap::Exception(Exception::StoreFault) |
-        Trap::Exception(Exception::StorePageFault) |
-        Trap::Exception(Exception::InstructionFault) |
-        Trap::Exception(Exception::InstructionPageFault) |
-        Trap::Exception(Exception::LoadFault) |
-        Trap::Exception(Exception::LoadPageFault) => {
+        Trap::Exception(Exception::StoreFault)
+        | Trap::Exception(Exception::StorePageFault)
+        | Trap::Exception(Exception::InstructionFault)
+        | Trap::Exception(Exception::InstructionPageFault)
+        | Trap::Exception(Exception::LoadFault)
+        | Trap::Exception(Exception::LoadPageFault) => {
             println!(
                 "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, core dumped.",
                 scause.cause(),
@@ -87,7 +79,11 @@ pub fn trap_handler() -> ! {
             suspend_current_and_run_next();
         }
         _ => {
-            panic!("Unsupported trap {:?}, stval = {:#x}!", scause.cause(), stval);
+            panic!(
+                "Unsupported trap {:?}, stval = {:#x}!",
+                scause.cause(),
+                stval
+            );
         }
     }
     //println!("before trap_return");

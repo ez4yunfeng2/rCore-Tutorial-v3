@@ -34,17 +34,15 @@ pub fn console_putchar(c: usize) {
 }
 
 pub fn console_getchar() -> usize {
-    loop{
+    loop {
         let ch = sbi_call(SBI_CONSOLE_GETCHAR, 0, 0, 0);
         if (ch as u8 as char).is_ascii() {
-            return ch
+            return ch;
         }
     }
-    
 }
 
 pub fn shutdown() -> ! {
     sbi_call(SBI_SHUTDOWN, 0, 0, 0);
     panic!("It should shutdown!");
 }
-

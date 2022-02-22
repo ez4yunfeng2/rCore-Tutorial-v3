@@ -1,23 +1,12 @@
+use crate::fs::{open_file, OpenFlags};
+use crate::mm::{translated_ref, translated_refmut, translated_str};
 use crate::task::{
+    current_process, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
-    exit_current_and_run_next,
-    current_task,
-    current_process,
-    current_user_token,
 };
-use crate::timer::get_time_ms;
-use crate::mm::{
-    translated_str,
-    translated_refmut,
-    translated_ref,
-};
-use crate::fs::{
-    open_file,
-    OpenFlags,
-};
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use alloc::string::String;
 
 pub fn sys_exit(exit_code: i32) -> ! {
     exit_current_and_run_next(exit_code);
@@ -29,12 +18,12 @@ pub fn sys_yield() -> isize {
     0
 }
 
-pub fn sys_get_time() -> isize {
-    get_time_ms() as isize
-}
-
 pub fn sys_getpid() -> isize {
     current_task().unwrap().process.upgrade().unwrap().getpid() as isize
+}
+
+pub fn sys_getppid() -> isize {
+    current_task().unwrap().process.upgrade().unwrap().getppid() as isize
 }
 
 pub fn sys_fork() -> isize {
@@ -61,7 +50,9 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
             break;
         }
         args_vec.push(translated_str(token, arg_str_ptr as *const u8));
-        unsafe { args = args.add(1); }
+        unsafe {
+            args = args.add(1);
+        }
     }
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
@@ -79,36 +70,42 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     let process = current_process();
-    // find a child process
-
-    let mut inner = process.inner_exclusive_access();
-    if inner.children
+    let inner = process.inner_exclusive_access();
+    if inner
+        .children
         .iter()
-        .find(|p| {pid == -1 || pid as usize == p.getpid()})
-        .is_none() {
+        .find(|p| pid == -1 || pid as usize == p.getpid())
+        .is_none()
+    {
         return -1;
-        // ---- release current PCB
     }
-    let pair = inner.children
-        .iter()
-        .enumerate()
-        .find(|(_, p)| {
-            // ++++ temporarily access child PCB exclusively
+    drop(inner);
+    loop {
+        let process = current_process();
+        let mut inner = process.inner_exclusive_access();
+        if let Some((idx, _)) = inner.children.iter().enumerate().find(|(_, p)| {
             p.inner_exclusive_access().is_zombie && (pid == -1 || pid as usize == p.getpid())
-            // ++++ release child PCB
-        });
-    if let Some((idx, _)) = pair {
-        let child = inner.children.remove(idx);
-        // confirm that child will be deallocated after being removed from children list
-        assert_eq!(Arc::strong_count(&child), 1);
-        let found_pid = child.getpid();
-        // ++++ temporarily access child PCB exclusively
-        let exit_code = child.inner_exclusive_access().exit_code;
-        // ++++ release child PCB
-        *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
-        found_pid as isize
-    } else {
-        -2
+        }) {
+            let child = inner.children.remove(idx);
+            assert_eq!(Arc::strong_count(&child), 1);
+            let found_pid = child.getpid();
+            let exit_code = child.inner_exclusive_access().exit_code;
+            if exit_code_ptr as usize != 0 {
+                *translated_refmut(inner.memory_set.token(), exit_code_ptr) = 3 << 8 | exit_code;
+            }
+            return found_pid as isize;
+        }
+        drop(inner);
+        suspend_current_and_run_next()
     }
-    // ---- release current PCB automatically
+}
+
+pub fn sys_brk(addr: usize) -> isize {
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    if let Some(res) = inner.res.as_mut() {
+        res.brk(addr) as isize
+    } else {
+        -1
+    }
 }

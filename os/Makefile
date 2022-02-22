@@ -32,7 +32,7 @@ OBJCOPY := rust-objcopy --binary-architecture=riscv64
 # Disassembly
 DISASM ?= -x
 
-build: env switch-check $(KERNEL_BIN) fs-img 
+build: env switch-check $(KERNEL_BIN)
 
 switch-check:
 ifeq ($(BOARD), qemu)
@@ -65,7 +65,7 @@ $(APPS):
 kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
-	@cargo build --release --features "board_$(BOARD)"
+	@cargo build --release --features "board_$(BOARD)" --target riscv64gc-unknown-none-elf
 	@rm src/linker.ld
 
 clean:
@@ -81,8 +81,9 @@ disasm-vim: kernel
 
 run: run-inner
 
-run-inner: build
-ifeq ($(BOARD),qemu)
+run-inner: build $(BOARD)
+
+qemu:
 	@qemu-system-riscv64 \
 		-machine virt \
 		-nographic \
@@ -90,22 +91,21 @@ ifeq ($(BOARD),qemu)
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
-else ifeq($(BOARD),d1)
-	@cp $(BOOTLOADER) $(BOOTLOADER).copy
-	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=1k seek=128
-	@mv $(BOOTLOADER).copy $(KERNEL_BIN)
-	xfel ddr ddr3
-	xfel write 0x80000000 $(KERNEL_BIN)
-	xfel exec 0x80000000
-else
-	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
+
+k210: 
 	@cp $(BOOTLOADER) $(BOOTLOADER).copy
 	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=$(K210_BOOTLOADER_SIZE) seek=1
 	@mv $(BOOTLOADER).copy $(KERNEL_BIN)
-	@sudo chmod 777 $(K210-SERIALPORT)
-	python3 $(K210-BURNER) -p $(K210-SERIALPORT) -b 1500000 $(KERNEL_BIN)
-	python3 -m serial.tools.miniterm --eol LF --dtr 0 --rts 0 --filter direct $(K210-SERIALPORT) 115200
-endif
+	@echo OS: $(KERNEL_BIN)
+
+d1:
+	@cp $(BOOTLOADER) $(BOOTLOADER).copy
+	@dd if=$(KERNEL_BIN) of=$(BOOTLOADER).copy bs=1k seek=128
+	@mv $(BOOTLOADER).copy $(KERNEL_BIN)
+	@xfel ddr ddr3
+	@xfel write 0x80000000 $(KERNEL_BIN)
+	@xfel exec 0x80000000
+
 
 debug: build
 	@tmux new-session -d \

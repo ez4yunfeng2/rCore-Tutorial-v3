@@ -1,20 +1,16 @@
-use crate::mm::{
-    MemorySet,
-    KERNEL_SPACE, 
-    translated_refmut,
-};
-use crate::trap::{TrapContext, trap_handler};
-use crate::sync::{UPSafeCell, Mutex, Semaphore};
-use core::cell::RefMut;
+use super::add_task;
 use super::id::RecycleAllocator;
 use super::TaskControlBlock;
-use super::{PidHandle, pid_alloc};
-use super::add_task;
-use alloc::sync::{Weak, Arc};
-use alloc::vec;
-use alloc::vec::Vec;
+use super::{pid_alloc, PidHandle};
+use crate::fs::{root, File, Stdin, Stdout};
+use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
+use crate::sync::{Mutex, Semaphore, UPSafeCell};
+use crate::trap::{trap_handler, TrapContext};
+use alloc::collections::BTreeMap;
 use alloc::string::String;
-use crate::fs::{File, Stdin, Stdout};
+use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
+use core::cell::RefMut;
 
 pub struct ProcessControlBlock {
     // immutable
@@ -29,11 +25,12 @@ pub struct ProcessControlBlockInner {
     pub parent: Option<Weak<ProcessControlBlock>>,
     pub children: Vec<Arc<ProcessControlBlock>>,
     pub exit_code: i32,
-    pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub fd_table: BTreeMap<usize, Option<Arc<dyn File + Send + Sync>>>,
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     pub task_res_allocator: RecycleAllocator,
     pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
+    pub dir_entry: Option<Arc<dyn File + Send + Sync>>,
 }
 
 impl ProcessControlBlockInner {
@@ -43,20 +40,20 @@ impl ProcessControlBlockInner {
     }
 
     pub fn alloc_fd(&mut self) -> usize {
-        if let Some(fd) = (0..self.fd_table.len())
-            .find(|fd| self.fd_table[*fd].is_none()) {
-            fd
-        } else {
-            self.fd_table.push(None);
-            self.fd_table.len() - 1
+        for i in 0..1000usize {
+            if !self.fd_table.contains_key(&i) {
+                self.fd_table.insert(i, None);
+                return i;
+            }
         }
+        panic!("alloc fd error")
     }
 
     pub fn alloc_tid(&mut self) -> usize {
         self.task_res_allocator.alloc()
     }
 
-    pub fn dealloc_tid(&mut self, tid: usize){
+    pub fn dealloc_tid(&mut self, tid: usize) {
         self.task_res_allocator.dealloc(tid)
     }
 
@@ -77,29 +74,30 @@ impl ProcessControlBlock {
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
+        println!("ustack_base: {:#x}",ustack_base);
         // allocate a pid
         let pid_handle = pid_alloc();
+        let mut btree: BTreeMap<usize, Option<Arc<dyn File + Send + Sync>>> = BTreeMap::new();
+        btree.insert(0, Some(Arc::new(Stdin)));
+        btree.insert(1, Some(Arc::new(Stdout)));
+        btree.insert(2, Some(Arc::new(Stdout)));
         let process = Arc::new(Self {
             pid: pid_handle,
-            inner: unsafe { UPSafeCell::new(ProcessControlBlockInner {
-                is_zombie: false, 
-                memory_set,
-                parent: None,
-                children: Vec::new(),
-                exit_code: 0,
-                fd_table: vec![
-                    // 0 -> stdin
-                    Some(Arc::new(Stdin)),
-                    // 1 -> stdout
-                    Some(Arc::new(Stdout)),
-                    // 2 -> stderr
-                    Some(Arc::new(Stdout)),
-                ],
-                tasks: Vec::new(),
-                task_res_allocator: RecycleAllocator::new(),
-                mutex_list: Vec::new(),
-                semaphore_list: Vec::new(),
-            })}
+            inner: unsafe {
+                UPSafeCell::new(ProcessControlBlockInner {
+                    is_zombie: false,
+                    memory_set,
+                    parent: None,
+                    children: Vec::new(),
+                    exit_code: 0,
+                    fd_table: btree,
+                    tasks: Vec::new(),
+                    task_res_allocator: RecycleAllocator::new(),
+                    mutex_list: Vec::new(),
+                    semaphore_list: Vec::new(),
+                    dir_entry: Some(root()),
+                })
+            },
         });
         // create a main thread, we should allocate ustack and trap_cx here
         let task = Arc::new(TaskControlBlock::new(
@@ -134,6 +132,7 @@ impl ProcessControlBlock {
         assert_eq!(self.inner_exclusive_access().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
+        println!("ustack_base: {:#x}",ustack_base);
         let new_token = memory_set.token();
         // substitute memory_set
         self.inner_exclusive_access().memory_set = memory_set;
@@ -142,6 +141,7 @@ impl ProcessControlBlock {
         let task = self.inner_exclusive_access().get_task(0);
         let mut task_inner = task.inner_exclusive_access();
         task_inner.res.as_mut().unwrap().ustack_base = ustack_base;
+        task_inner.res.as_mut().unwrap().brk_addr = ustack_base - 4096;
         task_inner.res.as_mut().unwrap().alloc_user_res();
         task_inner.trap_cx_ppn = task_inner.res.as_mut().unwrap().trap_cx_ppn();
         // push arguments on user stack
@@ -152,7 +152,7 @@ impl ProcessControlBlock {
             .map(|arg| {
                 translated_refmut(
                     new_token,
-                    (argv_base + arg * core::mem::size_of::<usize>()) as *mut usize
+                    (argv_base + arg * core::mem::size_of::<usize>()) as *mut usize,
                 )
             })
             .collect();
@@ -191,36 +191,45 @@ impl ProcessControlBlock {
         // alloc a pid
         let pid = pid_alloc();
         // copy fd table
-        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
-        for fd in parent.fd_table.iter() {
-            if let Some(file) = fd {
-                new_fd_table.push(Some(file.clone()));
+        let mut btree: BTreeMap<usize, Option<Arc<dyn File + Send + Sync>>> = BTreeMap::new();
+        for (fd, file) in parent.fd_table.iter() {
+            if let Some(f) = file {
+                btree.insert(*fd, Some(f.clone()));
             } else {
-                new_fd_table.push(None);
+                btree.insert(*fd, None);
             }
         }
-        // create child process pcb 
+        // create child process pcb
         let child = Arc::new(Self {
             pid,
-            inner: unsafe { UPSafeCell::new(ProcessControlBlockInner {
-                 is_zombie: false,
-                 memory_set,
-                 parent: Some(Arc::downgrade(self)),
-                 children: Vec::new(),
-                 exit_code: 0,
-                 fd_table: new_fd_table,
-                 tasks: Vec::new(),
-                 task_res_allocator: RecycleAllocator::new(),
-                 mutex_list: Vec::new(),
-                 semaphore_list: Vec::new(),
-            })}
+            inner: unsafe {
+                UPSafeCell::new(ProcessControlBlockInner {
+                    is_zombie: false,
+                    memory_set,
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    exit_code: 0,
+                    fd_table: btree,
+                    tasks: Vec::new(),
+                    task_res_allocator: RecycleAllocator::new(),
+                    mutex_list: Vec::new(),
+                    semaphore_list: Vec::new(),
+                    dir_entry: parent.dir_entry.clone(),
+                })
+            },
         });
         // add child
         parent.children.push(Arc::clone(&child));
         // create main thread of child process
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&child),
-            parent.get_task(0).inner_exclusive_access().res.as_ref().unwrap().ustack_base(),
+            parent
+                .get_task(0)
+                .inner_exclusive_access()
+                .res
+                .as_ref()
+                .unwrap()
+                .ustack_base(),
             // here we do not allocate trap_cx or ustack again
             // but mention that we allocate a new kstack here
             false,
@@ -242,5 +251,14 @@ impl ProcessControlBlock {
     pub fn getpid(&self) -> usize {
         self.pid.0
     }
-}
 
+    pub fn getppid(&self) -> usize {
+        self.inner_exclusive_access()
+            .parent
+            .as_ref()
+            .unwrap()
+            .upgrade()
+            .unwrap()
+            .getpid()
+    }
+}

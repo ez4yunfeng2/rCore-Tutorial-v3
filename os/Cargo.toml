@@ -7,6 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+log = "0.4"
+spin = "0.9"
 riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
 buddy_system_allocator = "0.6"
@@ -15,10 +17,10 @@ xmas-elf = "0.7.0"
 virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers" }
 k210-pac = { git = "https://github.com/wyfcyx/k210-pac" }
 k210-hal = { git = "https://github.com/wyfcyx/k210-hal" }
-k210-soc = { git = "https://github.com/wyfcyx/k210-soc" }
-easy-fs = { path = "../easy-fs" }
+k210-soc = { path = "../dependencies/k210-soc" }
 nezha_sdc = { git = "https://github.com/ez4yunfeng2/nezha-sdc.git", rev = "03180f2"}
 [features]
+default = [ "board_k210" ]
 board_qemu = []
 board_k210 = []
 board_d1 = []

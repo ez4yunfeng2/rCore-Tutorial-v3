@@ -1,38 +1,26 @@
 mod context;
+mod id;
+mod manager;
+mod process;
+mod processor;
 mod switch;
 mod task;
-mod manager;
-mod processor;
-mod id;
-mod process;
 
 use crate::fs::{open_file, OpenFlags};
-use switch::__switch;
 use alloc::sync::Arc;
-use manager::fetch_task;
 use lazy_static::*;
+use manager::fetch_task;
 use process::ProcessControlBlock;
+use switch::__switch;
 
 pub use context::TaskContext;
+pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
+pub use manager::add_task;
 pub use processor::{
-    run_tasks,
-    current_task,
-    current_process,
-    current_user_token,
-    current_trap_cx_user_va,
-    current_trap_cx,
-    current_kstack_top,
-    take_current_task,
-    schedule,
+    current_kstack_top, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
+    current_user_token, run_tasks, schedule, take_current_task,
 };
 pub use task::{TaskControlBlock, TaskStatus};
-pub use manager::add_task;
-pub use id::{
-    PidHandle,
-    pid_alloc,
-    KernelStack,
-    kstack_alloc,
-};
 
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
@@ -65,6 +53,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     let task = take_current_task().unwrap();
     let mut task_inner = task.inner_exclusive_access();
     let process = task.process.upgrade().unwrap();
+
     let tid = task_inner.res.as_ref().unwrap().tid;
     // record exit code
     task_inner.exit_code = Some(exit_code);
@@ -86,7 +75,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
             // move all child processes under init process
             let mut initproc_inner = INITPROC.inner_exclusive_access();
             for child in process_inner.children.iter() {
-                child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC)); 
+                child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
                 initproc_inner.children.push(child.clone());
             }
         }
