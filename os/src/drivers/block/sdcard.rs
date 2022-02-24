@@ -2,27 +2,26 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use super::BlockDevice;
-use crate::sync::UPSafeCell;
-use core::convert::TryInto;
-use k210_hal::prelude::*;
 use k210_pac::{Peripherals, SPI0};
+use k210_hal::prelude::*;
 use k210_soc::{
-    fpioa::{self, io},
-    // dmac::{dma_channel, DMAC, DMACExt},
     gpio,
     gpiohs,
-    sleep::usleep,
-    spi::{aitm, frame_format, tmod, work_mode, SPIExt, SPIImpl, SPI},
-    sysctl,
+    spi::{aitm, frame_format, tmod, work_mode, SPI, SPIExt, SPIImpl},
+    fpioa::{self, io},
+    sysctl::{self, dma_channel},
+    sleep::usleep, dmac::DMAC,
 };
+use crate::sync::UPSafeCell;
 use lazy_static::*;
+use super::BlockDevice;
+use core::convert::TryInto;
 
 pub struct SDCard<SPI> {
     spi: SPI,
     spi_cs: u32,
     cs_gpionum: u8,
-    // dmac: &'a DMAC,
+    dmac: DMAC,
     //channel: dma_channel,
 }
 
@@ -160,19 +159,12 @@ pub struct SDCardInfo {
 }
 
 impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
-    pub fn new(
-        spi: X,
-        spi_cs: u32,
-        cs_gpionum: u8, /*, dmac: &'a DMAC, channel: dma_channel*/
-    ) -> Self {
+    pub fn new(spi: X, spi_cs: u32, cs_gpionum: u8, dmac: DMAC) -> Self {
         Self {
             spi,
             spi_cs,
             cs_gpionum,
-            /*
-            dmac,
-            channel,
-             */
+            dmac
         }
     }
 
@@ -208,7 +200,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         self.spi.send_data(self.spi_cs, data);
     }
 
-    /*
+    
     fn write_data_dma(&self, data: &[u32]) {
         self.spi.configure(
             work_mode::MODE0,
@@ -221,10 +213,13 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             aitm::STANDARD,
             tmod::TRANS,
         );
+        let ptr = unsafe {Peripherals::steal() };
+        let dmac = DMAC::new(ptr.DMAC);
+        dmac.init();
         self.spi
-            .send_data_dma(self.dmac, self.channel, self.spi_cs, data);
+            .send_data_dma(&dmac, sysctl::dma_channel::CHANNEL0, self.spi_cs, data);
     }
-     */
+     
 
     fn read_data(&self, data: &mut [u8]) {
         self.spi.configure(
@@ -239,10 +234,9 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             tmod::RECV,
         );
         self.spi.recv_data(self.spi_cs, data);
-        
     }
 
-    /*
+    
     fn read_data_dma(&self, data: &mut [u32]) {
         self.spi.configure(
             work_mode::MODE0,
@@ -256,9 +250,9 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             tmod::RECV,
         );
         self.spi
-            .recv_data_dma(self.dmac, self.channel, self.spi_cs, data);
+            .recv_data_dma(&self.dmac, sysctl::dma_channel::CHANNEL0, self.spi_cs, data);
     }
-     */
+     
 
     /*
      * Send 5 bytes command to the SD card.
@@ -594,7 +588,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
      *         - `Err(())`: Sequence failed
      *         - `Ok(())`: Sequence succeed
      */
-    pub fn read_sector(&self, data_buf: &mut [u8], sector: u32) -> Result<(), ()> {
+    pub fn read_sector(&self, data_buf: &mut [u8], sector: u32) -> Result<(), u8> {
         assert!(data_buf.len() >= SEC_LEN && (data_buf.len() % SEC_LEN) == 0);
         /* Send CMD17 to read one block, or CMD18 for multiple */
         let flag = if data_buf.len() == SEC_LEN {
@@ -605,40 +599,85 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             true
         };
         /* Check if the SD acknowledged the read block command: R1 response (0x00: no errors) */
-        if self.get_response() != 0x00 {
+        let response = self.get_response();
+        if response != 0x00 {
             self.end_cmd();
-            return Err(());
+            return Err(response);
         }
         let mut error = false;
-        //let mut dma_chunk = [0u32; SEC_LEN];
-        let mut tmp_chunk = [0u8; SEC_LEN];
+
+
+        let mut tmp_chunk= [0u8; SEC_LEN];
         for chunk in data_buf.chunks_mut(SEC_LEN) {
             if self.get_response() != SD_START_DATA_SINGLE_BLOCK_READ {
                 error = true;
                 break;
             }
-            /* Read the SD block data : read NumByteToRead data */
-            //self.read_data_dma(&mut dma_chunk);
             self.read_data(&mut tmp_chunk);
-            /* Place the data received as u32 units from DMA into the u8 target buffer */
-            for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/ tmp_chunk.iter()) {
+            for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/tmp_chunk.iter()) {
                 //*a = (b & 0xff) as u8;
                 *a = *b;
             }
-            /* Get CRC bytes (not really needed by us, but required by SD) */
             let mut frame = [0u8; 2];
             self.read_data(&mut frame);
         }
+
         self.end_cmd();
         if flag {
             self.send_cmd(CMD::CMD12, 0, 0);
             self.get_response();
             self.end_cmd();
-            self.end_cmd();
+            // self.end_cmd();
         }
         /* It is an error if not everything requested was read */
         if error {
-            Err(())
+            Err(123)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn read_sector_dma(&self, data_buf: &mut [u8], sector: u32) -> Result<(), u8> {
+        assert!(data_buf.len() >= SEC_LEN && (data_buf.len() % SEC_LEN) == 0);
+        let flag = if data_buf.len() == SEC_LEN {
+            self.send_cmd(CMD::CMD17, sector, 0);
+            false
+        } else {
+            self.send_cmd(CMD::CMD18, sector, 0);
+            true
+        };
+        let response = self.get_response();
+        if response != 0x00 {
+            println!("Error sector: {} {}",sector,response);
+            self.end_cmd();
+            return Err(response);
+        }
+        let mut error = false;
+
+        let mut dma_chunk = [0u32; SEC_LEN];
+        for chunk in data_buf.chunks_mut(SEC_LEN) {
+            if self.get_response() != SD_START_DATA_SINGLE_BLOCK_READ {
+                error = true;
+                break;
+            }
+            self.read_data_dma(&mut dma_chunk);
+            for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/dma_chunk.iter()) {
+                *a = (b & 0xff) as u8;
+            }
+            let mut frame = [0u8; 2];
+            self.read_data(&mut frame);
+        }
+
+        self.end_cmd();
+        if flag {
+            self.send_cmd(CMD::CMD12, 0, 0);
+            self.get_response();
+            self.end_cmd();
+            // self.end_cmd();
+        }
+        /* It is an error if not everything requested was read */
+        if error {
+            Err(123)
         } else {
             Ok(())
         }
@@ -680,7 +719,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             /* Send the data token to signify the start of the data */
             self.write_data(&frame);
             /* Write the block data to SD : write count data by block */
-            for (a, &b) in /*dma_chunk*/ tmp_chunk.iter_mut().zip(chunk.iter()) {
+            for (a, &b) in /*dma_chunk*/tmp_chunk.iter_mut().zip(chunk.iter()) {
                 //*a = b.into();
                 *a = b;
             }
@@ -694,6 +733,53 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
                 return Err(());
             }
         }
+
+        self.end_cmd();
+        self.end_cmd();
+        Ok(())
+    }
+
+    pub fn write_sector_dma(&self, data_buf: &[u8], sector: u32) -> Result<(), ()> {
+        assert!(data_buf.len() >= SEC_LEN && (data_buf.len() % SEC_LEN) == 0);
+        let mut frame = [0xff, 0x00];
+        if data_buf.len() == SEC_LEN {
+            frame[1] = SD_START_DATA_SINGLE_BLOCK_WRITE;
+            self.send_cmd(CMD::CMD24, sector, 0);
+        } else {
+            frame[1] = SD_START_DATA_MULTIPLE_BLOCK_WRITE;
+            self.send_cmd(
+                CMD::ACMD23,
+                (data_buf.len() / SEC_LEN).try_into().unwrap(),
+                0,
+            );
+            self.get_response();
+            self.end_cmd();
+            self.send_cmd(CMD::CMD25, sector, 0);
+        }
+        /* Check if the SD acknowledged the write block command: R1 response (0x00: no errors) */
+        if self.get_response() != 0x00 {
+            self.end_cmd();
+            return Err(());
+        }
+
+        let mut dma_chunk = [0u32; SEC_LEN];
+        for chunk in data_buf.chunks(SEC_LEN) {
+            /* Send the data token to signify the start of the data */
+            self.write_data(&frame);
+            /* Write the block data to SD : write count data by block */
+            for (a, &b) in /*dma_chunk*/dma_chunk.iter_mut().zip(chunk.iter()) {
+                *a = b.into();
+            }
+            self.write_data_dma(&mut dma_chunk);
+            /* Put dummy CRC bytes */
+            self.write_data(&[0xff, 0xff]);
+            /* Read data response */
+            if self.get_dataresponse() != 0x00 {
+                self.end_cmd();
+                return Err(());
+            }
+        }
+
         self.end_cmd();
         self.end_cmd();
         Ok(())
@@ -716,8 +802,9 @@ fn io_init() {
 }
 
 lazy_static! {
-    static ref PERIPHERALS: UPSafeCell<Peripherals> =
-        unsafe { UPSafeCell::new(Peripherals::take().unwrap()) };
+    static ref PERIPHERALS: UPSafeCell<Peripherals> = unsafe {
+        UPSafeCell::new(Peripherals::take().unwrap())
+    };
 }
 
 fn init_sdcard() -> SDCard<SPIImpl<SPI0>> {
@@ -729,10 +816,14 @@ fn init_sdcard() -> SDCard<SPIImpl<SPI0>> {
     sysctl::pll_set_freq(sysctl::pll::PLL2, 45_158_400).unwrap();
     let clocks = k210_hal::clock::Clocks::new();
     peripherals.UARTHS.configure(115_200.bps(), &clocks);
+
+    let ptr = unsafe {Peripherals::steal() };
+    let dmac = DMAC::new(ptr.DMAC);
+    // dmac.enable_channel_interrupt(dma_channel::CHANNEL0);
     io_init();
 
     let spi = peripherals.SPI0.constrain();
-    let sd = SDCard::new(spi, SD_CS, SD_CS_GPIONUM);
+    let sd = SDCard::new(spi, SD_CS, SD_CS_GPIONUM,dmac);
     let info = sd.init().unwrap();
     let num_sectors = info.CardCapacity / 512;
     assert!(num_sectors > 0);
@@ -751,15 +842,16 @@ impl SDCardWrapper {
 
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        self.0
-            .exclusive_access()
-            .read_sector(buf, block_id as u32)
-            .unwrap();
+        self.0.exclusive_access().read_sector_dma(buf, block_id as u32);
+    
+        // self.0.exclusive_access().read_sector(buf,block_id as u32).unwarp();
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        self.0
-            .exclusive_access()
-            .write_sector(buf, block_id as u32)
-            .unwrap();
+        self.0.exclusive_access().write_sector(buf,block_id as u32).unwrap();
+    }
+
+    fn handler_interrupt(&self) {
+        todo!()
     }
 }
+

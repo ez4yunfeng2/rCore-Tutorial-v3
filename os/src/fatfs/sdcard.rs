@@ -1,10 +1,18 @@
 use super::io::{IoBase, Read, Seek, SeekFrom, Write};
 use crate::drivers::BLOCK_DEVICE;
+use crate::sync::UPSafeCell;
+use alloc::collections::BTreeMap;
 use alloc::{collections::VecDeque, sync::Arc};
-use core::cmp::min;
+use k210_pac::dmac::id;
+use core::cmp::{min, self};
 use core::convert::TryFrom;
 use crate::drivers::BlockDevice;
 use spin::mutex::Mutex;
+
+lazy_static::lazy_static!(
+    pub static ref BLK_MANAGER: Arc<UPSafeCell<BlkManager>> = Arc::new(unsafe{ UPSafeCell::new(BlkManager::new()) });
+);
+
 #[derive(Debug)]
 pub struct BlockCache {
     pub pos: usize,
@@ -14,6 +22,7 @@ pub struct BlockCache {
 
 impl BlockCache {
     fn new(p: usize, block_drv: Arc<dyn BlockDevice>) -> Self {
+        
         let mut cache = [0; 512];
         let block_id = p / 512;
         let pos = p % 512;
@@ -73,8 +82,6 @@ impl Seek for BlockCache {
 pub struct BlkCacheManager {
     pub pos: usize,
     pub block_driver: Arc<dyn BlockDevice>,
-    #[allow(unused)]
-    pub queue: VecDeque<(usize, Arc<Mutex<BlockCache>>)>,
 }
 
 impl BlkCacheManager {
@@ -82,18 +89,11 @@ impl BlkCacheManager {
         BlkCacheManager {
             pos: 0,
             block_driver: BLOCK_DEVICE.clone(),
-            queue: VecDeque::new(),
         }
     }
 }
 
-impl Iterator for BlkCacheManager {
-    type Item = Arc<Mutex<BlockCache>>;
-    fn next(&mut self) -> Option<Self::Item> {
-        let blk_cache = BlockCache::new(self.pos, self.block_driver.clone());
-        Some(Arc::new(Mutex::new(blk_cache)))
-    }
-}
+
 
 impl IoBase for BlkCacheManager {
     type Error = ();
@@ -101,32 +101,43 @@ impl IoBase for BlkCacheManager {
 
 impl Read for BlkCacheManager {
     fn read(&mut self, mut buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut len = 0;
+        let start_pos = self.pos;
         while !buf.is_empty() {
-            let blk_lock = self.next().unwrap();
-            let mut blk = blk_lock.lock();
-            let n = blk.read(buf).unwrap();
+            let offset = self.pos % 512;
+            let blk_id = self.pos / 512;
+            let n = BLK_MANAGER.exclusive_access().read_block(blk_id, &mut buf, &|blk,buf |{
+                let len = cmp::min(buf.len(),512 - offset);
+                for idx in 0..len {
+                    buf[idx] = blk.cache[offset + idx];
+                }
+                len
+            });
             let tmp = buf;
             buf = &mut tmp[n..];
             self.pos += n;
-            len += n;
         }
-        Ok(len)
+        Ok(self.pos - start_pos)
     }
 }
 
 impl Write for BlkCacheManager {
     fn write(&mut self, mut buf: &[u8]) -> Result<usize, Self::Error> {
-        let len = buf.len();
+        let start_pos = self.pos;
         while !buf.is_empty() {
-            let blk_lock = self.next().unwrap();
-            let mut blk = blk_lock.lock();
-            let n = blk.write(buf)?;
+            let offset = self.pos % 512;
+            let blk_id = self.pos / 512;
+            let n = BLK_MANAGER.exclusive_access().write_block(blk_id, &mut buf, &|blk,buf |{
+                let len = cmp::min(buf.len(),512 - offset);
+                for idx in 0..len {
+                    blk.cache[offset + idx] = buf[idx];
+                }
+                len
+            });
             let tmp = buf;
             buf = &tmp[n..];
             self.pos += n;
         }
-        Ok(len)
+        Ok(self.pos - start_pos)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
@@ -143,5 +154,63 @@ impl Seek for BlkCacheManager {
         };
         self.pos = new_offset_opt.unwrap() as usize;
         Ok(0)
+    }
+}
+
+impl Iterator for BlkCacheManager {
+    type Item = Arc<Mutex<BlockCache>>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let blk_cache = BlockCache::new(self.pos, self.block_driver.clone());
+        Some(Arc::new(Mutex::new(blk_cache)))
+    }
+}
+
+pub struct BlkManager {
+    driver: Arc<dyn BlockDevice>,
+    blocks: BTreeMap<usize,BlockCache>
+}
+
+impl BlkManager {
+    pub fn new() -> Self {
+        Self {
+            driver: BLOCK_DEVICE.clone(),
+            blocks: BTreeMap::new()
+        }
+    }
+    pub fn read_block_from_disk(&mut self,blk_id:usize) {
+        let mut buf = [0;512];
+        self.driver.read_block(blk_id, &mut buf);
+        let blk = BlockCache {
+            pos: 0,
+            block_id: blk_id,
+            cache: buf,
+        };
+        self.blocks.insert(blk_id, blk);
+    }
+    pub fn write_block_to_disk(&mut self,blk_id:usize) {
+        let mut blk = self.blocks.get_mut(&blk_id).unwrap();
+        self.driver.write_block(blk_id, &mut blk.cache);
+    }
+    pub fn read_block(&mut self,blk_id:usize,buf: &mut [u8],func:&dyn Fn(&BlockCache,&mut [u8]) -> usize) -> usize {
+        let opt = self.blocks.get(&blk_id);
+        let blk = if let Some(blk) = opt {
+            blk
+        } else {
+            self.read_block_from_disk(blk_id);
+            self.blocks.get(&blk_id).unwrap()
+        };
+        func.call_once((blk,buf))
+    }
+    pub fn write_block(&mut self,blk_id:usize,buf:&[u8], func:&dyn Fn(&mut BlockCache,&[u8]) -> usize) -> usize {
+        let opt = self.blocks.get_mut(&blk_id);
+        let mut blk = if let Some(blk) = opt {
+            blk
+        } else {
+            self.read_block_from_disk(blk_id);
+            self.blocks.get_mut(&blk_id).unwrap()
+        };
+        let len = func.call_once((&mut blk,buf));
+        self.write_block_to_disk(blk_id);
+        len
     }
 }

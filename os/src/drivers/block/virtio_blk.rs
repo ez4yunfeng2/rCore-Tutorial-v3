@@ -30,6 +30,7 @@ impl BlockDevice for VirtIOBlock {
             .write_block(block_id, buf)
             .expect("Error when writing VirtIOBlk");
     }
+    fn handler_interrupt(&self) {}
 }
 
 impl VirtIOBlock {

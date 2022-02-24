@@ -5,6 +5,7 @@ use core::convert::TryInto;
 use core::ops::Deref;
 //use k210_hal::pac;
 use k210_pac as pac;
+use pac::Interrupt;
 use pac::spi0::ctrlr0;
 use pac::spi0::spi_ctrlr0;
 use pac::{spi0, SPI0, SPI1};
@@ -12,6 +13,10 @@ use pac::{spi0, SPI0, SPI1};
 //use super::sysctl;
 use super::dmac::{address_increment, burst_length, transfer_width, DMAC};
 use super::sysctl::{self, dma_channel};
+
+extern "C" {
+    fn wait_irq_and_run_next(source:Interrupt);
+}
 
 /// Extension trait that constrains SPI peripherals
 pub trait SPIExt: Sized {
@@ -267,6 +272,7 @@ impl<IF: SPI01> SPI for SPIImpl<IF> {
             );
             self.spi.dr[0].write(|w| w.bits(0xffffffff));
             self.spi.ser.write(|w| w.bits(1 << chip_select));
+            // wait_irq_and_run_next(Interrupt::DMA0);
             dmac.wait_done(channel_num);
 
             self.spi.ser.write(|w| w.bits(0x00));

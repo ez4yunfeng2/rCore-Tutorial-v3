@@ -92,7 +92,10 @@ pub fn current_trap_cx_user_va() -> usize {
 }
 
 pub fn current_kstack_top() -> usize {
-    current_task().unwrap().kstack.get_top()
+    match current_task() {
+        Some(task) => task.kstack.get_top(),
+        None => 0,
+    }
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {

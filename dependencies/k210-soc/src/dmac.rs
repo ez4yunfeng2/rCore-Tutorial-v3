@@ -4,6 +4,7 @@
 //! DMAC peripheral
 //use k210_hal::pac;
 use k210_pac as pac;
+use pac::Peripherals;
 use pac::dmac::channel::cfg::{HS_SEL_SRC_A, TT_FC_A};
 use pac::dmac::channel::ctl::SMS_A;
 
@@ -706,7 +707,7 @@ impl DMAC {
     /** Wait for a DMA channel to be idle. */
     pub fn wait_idle(&self, channel_num: dma_channel) {
         while !self.is_idle(channel_num) {}
-        self.channel_interrupt_clear(channel_num); /* clear interrupt */
+        // self.channel_interrupt_clear(channel_num); /* clear interrupt */
     }
 
     /*
@@ -722,4 +723,20 @@ impl DMAC {
     */
 
     // TODO: completion IRQ functionality
+}
+
+pub fn channel_interrupt_clear(channel_num: dma_channel) {
+    unsafe {
+        let ptr = pac::DMAC::ptr();
+        (*ptr).channel[channel_num as usize].intclear.write(|w| w.bits(0xffffffff));
+    }
+}
+
+pub fn enable_channel_interrupt(channel_num: dma_channel) {
+    unsafe {
+        let ptr = pac::DMAC::ptr();
+        let ch = &(*ptr).channel[channel_num.idx()];
+        ch.intclear.write(|w| w.bits(0xffffffff));
+        ch.intstatus_en.write(|w| w.bits(0x2));
+    }
 }

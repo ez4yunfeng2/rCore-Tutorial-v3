@@ -74,7 +74,6 @@ impl ProcessControlBlock {
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
-        println!("ustack_base: {:#x}",ustack_base);
         // allocate a pid
         let pid_handle = pid_alloc();
         let mut btree: BTreeMap<usize, Option<Arc<dyn File + Send + Sync>>> = BTreeMap::new();
@@ -132,7 +131,6 @@ impl ProcessControlBlock {
         assert_eq!(self.inner_exclusive_access().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
-        println!("ustack_base: {:#x}",ustack_base);
         let new_token = memory_set.token();
         // substitute memory_set
         self.inner_exclusive_access().memory_set = memory_set;

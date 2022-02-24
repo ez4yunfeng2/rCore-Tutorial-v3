@@ -1,4 +1,4 @@
-use crate::sbi::console_putchar;
+use crate::drivers::UART_DEVICE;
 use core::fmt::{self, Write};
 
 struct Stdout;
@@ -6,7 +6,7 @@ struct Stdout;
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
-            console_putchar(c as usize);
+            UART_DEVICE.putchar(c as u8)
         }
         Ok(())
     }

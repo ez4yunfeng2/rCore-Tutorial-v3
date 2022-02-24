@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+
+
 const SBI_SET_TIMER: usize = 0;
 const SBI_CONSOLE_PUTCHAR: usize = 1;
 const SBI_CONSOLE_GETCHAR: usize = 2;
@@ -40,6 +42,10 @@ pub fn console_getchar() -> usize {
             return ch;
         }
     }
+}
+#[inline]
+pub fn sbi_rustsbi_k210_sext(func:usize) {
+    sbi_call(0x0A000004, func, 0, 0);
 }
 
 pub fn shutdown() -> ! {
