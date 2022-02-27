@@ -802,6 +802,7 @@ impl Iterator for DirEntry {
         }
     }
 }
+
 fn split_path(path: &str) -> (&str, Option<&str>) {
     let trimmed_path = path.trim_matches('/');
     trimmed_path.find('/').map_or((trimmed_path, None), |n| {
@@ -846,8 +847,6 @@ impl DirEntryEditor {
             self.data.set_size(size)
         }
     }
-
-
 
     pub fn flush(&self) {
         let mut disk = BlkCacheManager::new();

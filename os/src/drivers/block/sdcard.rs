@@ -10,8 +10,9 @@ use k210_soc::{
     spi::{aitm, frame_format, tmod, work_mode, SPI, SPIExt, SPIImpl},
     fpioa::{self, io},
     sysctl::{self, dma_channel},
-    sleep::usleep, dmac::DMAC,
+    sleep::usleep, dmac::{DMAC, DMACExt},
 };
+use log::error;
 use crate::sync::UPSafeCell;
 use lazy_static::*;
 use super::BlockDevice;
@@ -22,7 +23,7 @@ pub struct SDCard<SPI> {
     spi_cs: u32,
     cs_gpionum: u8,
     dmac: DMAC,
-    //channel: dma_channel,
+    channel: dma_channel,
 }
 
 /*
@@ -159,12 +160,13 @@ pub struct SDCardInfo {
 }
 
 impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
-    pub fn new(spi: X, spi_cs: u32, cs_gpionum: u8, dmac: DMAC) -> Self {
+    pub fn new(spi: X, spi_cs: u32, cs_gpionum: u8, dmac: DMAC, channel :dma_channel) -> Self {
         Self {
             spi,
             spi_cs,
             cs_gpionum,
-            dmac
+            dmac,
+            channel
         }
     }
 
@@ -213,11 +215,8 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             aitm::STANDARD,
             tmod::TRANS,
         );
-        let ptr = unsafe {Peripherals::steal() };
-        let dmac = DMAC::new(ptr.DMAC);
-        dmac.init();
         self.spi
-            .send_data_dma(&dmac, sysctl::dma_channel::CHANNEL0, self.spi_cs, data);
+            .send_data_dma(&self.dmac, self.channel, self.spi_cs, data);
     }
      
 
@@ -250,7 +249,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             tmod::RECV,
         );
         self.spi
-            .recv_data_dma(&self.dmac, sysctl::dma_channel::CHANNEL0, self.spi_cs, data);
+            .recv_data_dma(&self.dmac, self.channel, self.spi_cs, data);
     }
      
 
@@ -637,6 +636,13 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         }
     }
 
+    pub fn dump_dmac(&self) {
+        // println!("Status: {:#x} {:#x}",
+        //     self.dmac.dmac.intstatus.read().bits(),
+        //     self.dmac.dmac.com_intstatus_en.read().bits()
+        // )
+    }
+
     pub fn read_sector_dma(&self, data_buf: &mut [u8], sector: u32) -> Result<(), u8> {
         assert!(data_buf.len() >= SEC_LEN && (data_buf.len() % SEC_LEN) == 0);
         let flag = if data_buf.len() == SEC_LEN {
@@ -646,6 +652,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             self.send_cmd(CMD::CMD18, sector, 0);
             true
         };
+
         let response = self.get_response();
         if response != 0x00 {
             println!("Error sector: {} {}",sector,response);
@@ -675,6 +682,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             self.end_cmd();
             // self.end_cmd();
         }
+        
         /* It is an error if not everything requested was read */
         if error {
             Err(123)
@@ -816,14 +824,12 @@ fn init_sdcard() -> SDCard<SPIImpl<SPI0>> {
     sysctl::pll_set_freq(sysctl::pll::PLL2, 45_158_400).unwrap();
     let clocks = k210_hal::clock::Clocks::new();
     peripherals.UARTHS.configure(115_200.bps(), &clocks);
-
-    let ptr = unsafe {Peripherals::steal() };
-    let dmac = DMAC::new(ptr.DMAC);
-    // dmac.enable_channel_interrupt(dma_channel::CHANNEL0);
+    let channel = dma_channel::CHANNEL0;
+    let ptr = unsafe { Peripherals::steal() };
+    let dmac = ptr.DMAC.configure();
     io_init();
-
     let spi = peripherals.SPI0.constrain();
-    let sd = SDCard::new(spi, SD_CS, SD_CS_GPIONUM,dmac);
+    let sd = SDCard::new(spi, SD_CS, SD_CS_GPIONUM,dmac,channel);
     let info = sd.init().unwrap();
     let num_sectors = info.CardCapacity / 512;
     assert!(num_sectors > 0);
@@ -841,11 +847,11 @@ impl SDCardWrapper {
 }
 
 impl BlockDevice for SDCardWrapper {
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        self.0.exclusive_access().read_sector_dma(buf, block_id as u32);
-    
-        // self.0.exclusive_access().read_sector(buf,block_id as u32).unwarp();
+    fn read_block(&self, block_id: usize, buf: &mut [u8]) {  
+        // self.0.exclusive_access().read_sector_dma(buf, block_id as u32).unwrap();
+        self.0.exclusive_access().read_sector(buf,block_id as u32).unwrap();
     }
+    
     fn write_block(&self, block_id: usize, buf: &[u8]) {
         self.0.exclusive_access().write_sector(buf,block_id as u32).unwrap();
     }
@@ -854,4 +860,3 @@ impl BlockDevice for SDCardWrapper {
         todo!()
     }
 }
-

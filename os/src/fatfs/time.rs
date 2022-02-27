@@ -113,15 +113,10 @@ impl Time {
     }
 }
 
-/// A DOS compatible date and time.
-///
-/// Used by `DirEntry` time-related methods.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[non_exhaustive]
 pub struct DateTime {
-    /// A date part
     pub date: Date,
-    // A time part
     pub time: Time,
 }
 

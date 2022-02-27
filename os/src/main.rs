@@ -1,10 +1,14 @@
 #![no_std]
 #![no_main]
-#![feature(global_asm)]
 #![feature(asm)]
 #![feature(fn_traits)]
+#![feature(global_asm)]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+
+use riscv::register::satp;
+
+use crate::sbi::send_ipi;
 
 extern crate alloc;
 
@@ -25,7 +29,7 @@ mod syscall;
 mod task;
 mod timer;
 mod trap;
-mod irq;
+// mod irq;
 global_asm!(include_str!("entry.asm"));
 
 fn clear_bss() {
@@ -40,18 +44,29 @@ fn clear_bss() {
 }
 
 #[no_mangle]
-pub fn rust_main() -> ! {
-    clear_bss();
-    mm::init();
-    mm::remap_test();
-    println!("[kernel] Hello, world!");
-    println!("{}",include_str!("banner"));
-    irq::irq_init();
-    trap::init();
-    trap::enable_timer_interrupt();
-    timer::set_next_trigger();
-    fatfs::fs_init();
-    task::add_initproc();
-    task::run_tasks();
+pub fn rust_main(hartid:usize) -> ! {
+
+    if hartid == 0 {
+        clear_bss();
+        mm::init();
+        mm::remap_test();
+        // irq::irq_init();
+        trap::init();
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+        println!("[kernel] Lotus core {}",hartid);
+        println!("{}",include_str!("banner"));
+        fatfs::fs_init();
+        task::add_initproc();
+        send_ipi(1);
+        task::run_tasks(hartid);
+    } else {
+        mm::activate();
+        // trap::init();
+        // trap::enable_timer_interrupt();
+        println!("Init hart 1 {:#x}",satp::read().bits());
+        task::run_tasks(hartid);
+        
+    }
     panic!("Unreachable in rust_main!");
 }

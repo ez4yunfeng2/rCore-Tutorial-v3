@@ -6,9 +6,9 @@ mod processor;
 mod switch;
 mod task;
 
-use crate::{fs::{open_file, OpenFlags}, irq::wait_for_irq};
+use crate::{fs::{open_file, OpenFlags}};
 use alloc::sync::Arc;
-use k210_pac::Interrupt;
+
 use lazy_static::*;
 use manager::fetch_task;
 use process::ProcessControlBlock;
@@ -100,14 +100,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     schedule(&mut _unused as *mut _);
 }
 
-#[no_mangle]
-pub fn wait_irq_and_run_next(source:Interrupt) {
-    if let Some(_task) = current_task() {
-        
-    } else {
-        wait_for_irq(source);
-    }
-}
+
 
 lazy_static! {
     pub static ref INITPROC: Arc<ProcessControlBlock> = {

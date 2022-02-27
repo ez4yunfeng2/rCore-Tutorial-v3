@@ -4,9 +4,8 @@
 //! DMAC peripheral
 //use k210_hal::pac;
 use k210_pac as pac;
-use pac::Peripherals;
-use pac::dmac::channel::cfg::{HS_SEL_SRC_A, TT_FC_A};
-use pac::dmac::channel::ctl::SMS_A;
+use pac::dmac::channel::cfg::{TT_FC_A,HS_SEL_SRC_A};
+use pac::dmac::channel::ctl::{SMS_A};
 
 use super::sysctl;
 
@@ -17,14 +16,12 @@ pub trait DMACExt: Sized {
 }
 
 impl DMACExt for pac::DMAC {
-    fn configure(self) -> DMAC {
-        DMAC::new(self)
-    }
+    fn configure(self) -> DMAC { DMAC::new(self) }
 }
 
 /** DMAC peripheral abstraction */
 pub struct DMAC {
-    dmac: pac::DMAC,
+    pub dmac: pac::DMAC,
 }
 
 /*
@@ -63,7 +60,7 @@ fn is_memory(address: u64) -> bool {
 }
 
 impl DMAC {
-    pub fn new(dmac: pac::DMAC) -> Self {
+    fn new(dmac: pac::DMAC) -> Self {
         let rv = Self { dmac };
         rv.init();
         rv
@@ -86,22 +83,19 @@ impl DMAC {
 
     /** Enable DMAC peripheral. */
     fn enable(&self) {
-        self.dmac
-            .cfg
-            .modify(|_, w| w.dmac_en().set_bit().int_en().set_bit());
+        self.dmac.cfg.modify(|_,w| w.dmac_en().set_bit()
+            .int_en().set_bit());
     }
 
     /** Disable DMAC peripheral. */
     pub fn disable(&self) {
-        self.dmac
-            .cfg
-            .modify(|_, w| w.dmac_en().clear_bit().int_en().clear_bit());
+        self.dmac.cfg.modify(|_,w| w.dmac_en().clear_bit()
+            .int_en().clear_bit());
     }
 
     pub fn src_transaction_complete_int_enable(&self, channel_num: dma_channel) {
-        self.dmac.channel[channel_num.idx()]
-            .intstatus_en
-            .modify(|_, w| w.src_transcomp().set_bit());
+        self.dmac.channel[channel_num.idx()].intstatus_en.modify(
+            |_,w| w.src_transcomp().set_bit());
     }
 
     /** Enable a DMA channel. */
@@ -110,34 +104,28 @@ impl DMAC {
         // Note: chX bit names start counting from 1, while channels start counting from 0
         match channel_num {
             CHANNEL0 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch1_en().set_bit().ch1_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch1_en().set_bit()
+                    .ch1_en_we().set_bit());
             }
             CHANNEL1 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch2_en().set_bit().ch2_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch2_en().set_bit()
+                    .ch2_en_we().set_bit());
             }
             CHANNEL2 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch3_en().set_bit().ch3_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch3_en().set_bit()
+                    .ch3_en_we().set_bit());
             }
             CHANNEL3 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch4_en().set_bit().ch4_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch4_en().set_bit()
+                    .ch4_en_we().set_bit());
             }
             CHANNEL4 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch5_en().set_bit().ch5_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch5_en().set_bit()
+                    .ch5_en_we().set_bit());
             }
             CHANNEL5 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch6_en().set_bit().ch6_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch6_en().set_bit()
+                    .ch6_en_we().set_bit());
             }
         }
     }
@@ -148,34 +136,28 @@ impl DMAC {
         // Note: chX bit names start counting from 1, while channels start counting from 0
         match channel_num {
             CHANNEL0 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch1_en().clear_bit().ch1_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch1_en().clear_bit()
+                    .ch1_en_we().set_bit());
             }
             CHANNEL1 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch2_en().clear_bit().ch2_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch2_en().clear_bit()
+                    .ch2_en_we().set_bit());
             }
             CHANNEL2 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch3_en().clear_bit().ch3_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch3_en().clear_bit()
+                    .ch3_en_we().set_bit());
             }
             CHANNEL3 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch4_en().clear_bit().ch4_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch4_en().clear_bit()
+                    .ch4_en_we().set_bit());
             }
             CHANNEL4 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch5_en().clear_bit().ch5_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch5_en().clear_bit()
+                    .ch5_en_we().set_bit());
             }
             CHANNEL5 => {
-                self.dmac
-                    .chen
-                    .modify(|_, w| w.ch6_en().clear_bit().ch6_en_we().set_bit());
+                self.dmac.chen.modify(|_,w| w.ch6_en().clear_bit()
+                    .ch6_en_we().set_bit());
             }
         }
     }
@@ -195,15 +177,10 @@ impl DMAC {
         // is this necessary? It seems not.
     }
 
-    pub fn set_list_master_select(
-        &self,
-        channel_num: dma_channel,
-        sd_sel: src_dst_select,
-        mst_num: master_number,
-    ) -> Result<(), ()> {
+    pub fn set_list_master_select(&self, channel_num: dma_channel, sd_sel: src_dst_select, mst_num: master_number) -> Result<(),()> {
         if !self.check_channel_busy(channel_num) {
             use src_dst_select::*;
-            self.dmac.channel[channel_num.idx()].ctl.modify(|_, w| {
+            self.dmac.channel[channel_num.idx()].ctl.modify(|_,w| {
                 let w = if sd_sel == SRC || sd_sel == SRC_DST {
                     w.sms().variant(mst_num)
                 } else {
@@ -225,33 +202,23 @@ impl DMAC {
     }
 
     pub fn enable_common_interrupt_status(&self) {
-        self.dmac.com_intstatus_en.modify(|_, w| {
-            w.slvif_dec_err()
-                .set_bit()
-                .slvif_wr2ro_err()
-                .set_bit()
-                .slvif_rd2wo_err()
-                .set_bit()
-                .slvif_wronhold_err()
-                .set_bit()
-                .slvif_undefinedreg_dec_err()
-                .set_bit()
-        });
+        self.dmac.com_intstatus_en.modify(|_,w|
+            w.slvif_dec_err().set_bit()
+                .slvif_wr2ro_err().set_bit()
+                .slvif_rd2wo_err().set_bit()
+                .slvif_wronhold_err().set_bit()
+                .slvif_undefinedreg_dec_err().set_bit()
+        );
     }
 
     pub fn enable_common_interrupt_signal(&self) {
-        self.dmac.com_intsignal_en.modify(|_, w| {
-            w.slvif_dec_err()
-                .set_bit()
-                .slvif_wr2ro_err()
-                .set_bit()
-                .slvif_rd2wo_err()
-                .set_bit()
-                .slvif_wronhold_err()
-                .set_bit()
-                .slvif_undefinedreg_dec_err()
-                .set_bit()
-        });
+        self.dmac.com_intsignal_en.modify(|_,w|
+            w.slvif_dec_err().set_bit()
+                .slvif_wr2ro_err().set_bit()
+                .slvif_rd2wo_err().set_bit()
+                .slvif_wronhold_err().set_bit()
+                .slvif_undefinedreg_dec_err().set_bit()
+        );
     }
 
     pub fn enable_channel_interrupt(&self, channel_num: dma_channel) {
@@ -264,32 +231,24 @@ impl DMAC {
 
     pub fn disable_channel_interrupt(&self, channel_num: dma_channel) {
         unsafe {
-            self.dmac.channel[channel_num.idx()]
-                .intstatus_en
-                .write(|w| w.bits(0x0));
+            self.dmac.channel[channel_num.idx()].intstatus_en.write(
+                |w| w.bits(0x0));
         }
     }
 
-    pub fn channel_interrupt_clear(&self, channel_num: dma_channel) {
+    fn channel_interrupt_clear(&self, channel_num: dma_channel) {
         unsafe {
-            self.dmac.channel[channel_num.idx()]
-                .intclear
-                .write(|w| w.bits(0xffffffff));
+            self.dmac.channel[channel_num.idx()].intclear.write(
+                |w| w.bits(0xffffffff));
         }
     }
 
     /** Set DMA channel parameters. */
-    pub fn set_channel_param(
-        &self,
-        channel_num: dma_channel,
-        src: u64,
-        dest: u64,
-        src_inc: address_increment,
-        dest_inc: address_increment,
-        burst_size: burst_length,
-        trans_width: transfer_width,
-        block_size: u32,
-    ) {
+    pub fn set_channel_param(&self, channel_num: dma_channel,
+                             src: u64, dest: u64, src_inc: address_increment, dest_inc: address_increment,
+                             burst_size: burst_length,
+                             trans_width: transfer_width,
+                             block_size: u32) {
         unsafe {
             let ch = &self.dmac.channel[channel_num.idx()];
             let src_is_mem = is_memory(src);
@@ -305,60 +264,37 @@ impl DMAC {
              * cfg register must configure before ts_block and
              * sar dar register
              */
-            ch.cfg.modify(|_, w| {
-                w.tt_fc()
-                    .variant(flow_control)
-                    .hs_sel_src()
-                    .variant(if src_is_mem {
-                        HS_SEL_SRC_A::SOFTWARE
-                    } else {
-                        HS_SEL_SRC_A::HARDWARE
-                    })
-                    .hs_sel_dst()
-                    .variant(if dest_is_mem {
-                        HS_SEL_SRC_A::SOFTWARE
-                    } else {
-                        HS_SEL_SRC_A::HARDWARE
-                    })
+            ch.cfg.modify(|_,w|
+                w.tt_fc().variant(flow_control)
+                    .hs_sel_src().variant(if src_is_mem { HS_SEL_SRC_A::SOFTWARE } else { HS_SEL_SRC_A::HARDWARE } )
+                    .hs_sel_dst().variant(if dest_is_mem { HS_SEL_SRC_A::SOFTWARE } else { HS_SEL_SRC_A::HARDWARE } )
                     // Note: from SVD: "Assign a hardware handshaking interface to source of channel",
                     // these are set using sysctl::dma_select; this configuration seems to indicate
                     // that in principle, it's possible to use a different source and destination
                     // handshaking interface for a channel, but that would sacrifice the interface of
                     // another channel.
-                    .src_per()
-                    .bits(channel_num as u8)
-                    .dst_per()
-                    .bits(channel_num as u8)
-                    .src_multblk_type()
-                    .bits(0)
-                    .dst_multblk_type()
-                    .bits(0)
-            });
+                    .src_per().bits(channel_num as u8)
+                    .dst_per().bits(channel_num as u8)
+                    .src_multblk_type().bits(0)
+                    .dst_multblk_type().bits(0)
+            );
 
             ch.sar.write(|w| w.bits(src));
             ch.dar.write(|w| w.bits(dest));
 
-            ch.ctl.modify(|_, w| {
-                w.sms()
-                    .variant(SMS_A::AXI_MASTER_1)
-                    .dms()
-                    .variant(SMS_A::AXI_MASTER_2)
+            ch.ctl.modify(|_,w|
+                w.sms().variant(SMS_A::AXI_MASTER_1)
+                    .dms().variant(SMS_A::AXI_MASTER_2)
                     /* master select */
-                    .sinc()
-                    .variant(src_inc)
-                    .dinc()
-                    .variant(dest_inc)
+                    .sinc().variant(src_inc)
+                    .dinc().variant(dest_inc)
                     /* address incrememt */
-                    .src_tr_width()
-                    .variant(trans_width)
-                    .dst_tr_width()
-                    .variant(trans_width)
+                    .src_tr_width().variant(trans_width)
+                    .dst_tr_width().variant(trans_width)
                     /* transfer width */
-                    .src_msize()
-                    .variant(burst_size)
-                    .dst_msize()
-                    .variant(burst_size)
-            });
+                    .src_msize().variant(burst_size)
+                    .dst_msize().variant(burst_size)
+            );
 
             ch.block_ts.write(|w| w.block_ts().bits(block_size - 1));
             /*the number of (blcok_ts +1) data of width SRC_TR_WIDTF to be */
@@ -477,29 +413,25 @@ impl DMAC {
         sysctl::clock_enable(sysctl::clock::DMA);
 
         /* reset dmac */
-        self.dmac.reset.modify(|_, w| w.rst().set_bit());
+        self.dmac.reset.modify(|_,w| w.rst().set_bit());
         while self.dmac.reset.read().rst().bit() {
             // IDLE
         }
 
         /* clear common register interrupt */
-        self.dmac.com_intclear.modify(|_, w| {
-            w.slvif_dec_err()
-                .set_bit()
-                .slvif_wr2ro_err()
-                .set_bit()
-                .slvif_rd2wo_err()
-                .set_bit()
-                .slvif_wronhold_err()
-                .set_bit()
-                .slvif_undefinedreg_dec_err()
-                .set_bit()
-        });
+        self.dmac.com_intclear.modify(|_,w|
+            w.slvif_dec_err().set_bit()
+                .slvif_wr2ro_err().set_bit()
+                .slvif_rd2wo_err().set_bit()
+                .slvif_wronhold_err().set_bit()
+                .slvif_undefinedreg_dec_err().set_bit()
+        );
 
         /* disable dmac and disable interrupt */
-        self.dmac
-            .cfg
-            .modify(|_, w| w.dmac_en().clear_bit().int_en().clear_bit());
+        self.dmac.cfg.modify(|_,w|
+            w.dmac_en().clear_bit()
+                .int_en().clear_bit()
+        );
 
         while self.dmac.cfg.read().bits() != 0 {
             // IDLE
@@ -507,33 +439,23 @@ impl DMAC {
         /* disable all channel before configure */
         /* Note: changed from the SDK code, which doesn't clear channel 4 and 5,
          * and doesn't set associated _we bits */
-        self.dmac.chen.modify(|_, w| {
-            w.ch1_en()
-                .clear_bit()
-                .ch1_en_we()
-                .set_bit()
-                .ch2_en()
-                .clear_bit()
-                .ch2_en_we()
-                .set_bit()
-                .ch3_en()
-                .clear_bit()
-                .ch3_en_we()
-                .set_bit()
-                .ch4_en()
-                .clear_bit()
-                .ch4_en_we()
-                .set_bit()
-                .ch5_en()
-                .clear_bit()
-                .ch5_en_we()
-                .set_bit()
-        });
+        self.dmac.chen.modify(|_,w|
+            w.ch1_en().clear_bit()
+                .ch1_en_we().set_bit()
+                .ch2_en().clear_bit()
+                .ch2_en_we().set_bit()
+                .ch3_en().clear_bit()
+                .ch3_en_we().set_bit()
+                .ch4_en().clear_bit()
+                .ch4_en_we().set_bit()
+                .ch5_en().clear_bit()
+                .ch5_en_we().set_bit()
+        );
 
         self.enable();
     }
 
-    // TODO: list (scatter/gather) functionality
+// TODO: list (scatter/gather) functionality
 
     /*
     static void list_add(struct list_head_t *new, struct list_head_t *prev,
@@ -657,31 +579,20 @@ impl DMAC {
     */
 
     /** Start a single DMA transfer. */
-    pub fn set_single_mode(
-        &self,
-        channel_num: dma_channel,
-        src: u64,
-        dest: u64,
-        src_inc: address_increment,
-        dest_inc: address_increment,
-        burst_size: burst_length,
-        trans_width: transfer_width,
-        block_size: u32,
-    ) {
+    pub fn set_single_mode(&self, channel_num: dma_channel,
+                           src: u64, dest: u64, src_inc: address_increment,
+                           dest_inc: address_increment,
+                           burst_size: burst_length,
+                           trans_width: transfer_width,
+                           block_size: u32) {
         self.channel_interrupt_clear(channel_num);
         self.channel_disable(channel_num);
         self.wait_idle(channel_num);
-        self.set_channel_param(
-            channel_num,
-            src,
-            dest,
-            src_inc,
-            dest_inc,
-            burst_size,
-            trans_width,
-            block_size,
-        );
+        self.set_channel_param(channel_num, src, dest, src_inc, dest_inc,
+                               burst_size, trans_width, block_size);
+        
         self.enable();
+        self.enable_channel_interrupt(channel_num);
         self.channel_enable(channel_num);
     }
 
@@ -706,8 +617,9 @@ impl DMAC {
 
     /** Wait for a DMA channel to be idle. */
     pub fn wait_idle(&self, channel_num: dma_channel) {
-        while !self.is_idle(channel_num) {}
-        // self.channel_interrupt_clear(channel_num); /* clear interrupt */
+        while !self.is_idle(channel_num) {
+        }
+        self.channel_interrupt_clear(channel_num); /* clear interrupt */
     }
 
     /*
@@ -722,21 +634,6 @@ impl DMAC {
     }
     */
 
-    // TODO: completion IRQ functionality
-}
+// TODO: completion IRQ functionality
 
-pub fn channel_interrupt_clear(channel_num: dma_channel) {
-    unsafe {
-        let ptr = pac::DMAC::ptr();
-        (*ptr).channel[channel_num as usize].intclear.write(|w| w.bits(0xffffffff));
-    }
-}
-
-pub fn enable_channel_interrupt(channel_num: dma_channel) {
-    unsafe {
-        let ptr = pac::DMAC::ptr();
-        let ch = &(*ptr).channel[channel_num.idx()];
-        ch.intclear.write(|w| w.bits(0xffffffff));
-        ch.intstatus_en.write(|w| w.bits(0x2));
-    }
 }

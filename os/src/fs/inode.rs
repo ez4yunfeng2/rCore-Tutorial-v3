@@ -71,6 +71,7 @@ pub fn root() -> Arc<OSInode> {
 }
 
 pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
+    println!("Open: {}",path);
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
         let file = root_dir().create(path, false).unwrap();

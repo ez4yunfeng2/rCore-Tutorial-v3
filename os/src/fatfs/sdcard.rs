@@ -7,7 +7,6 @@ use k210_pac::dmac::id;
 use core::cmp::{min, self};
 use core::convert::TryFrom;
 use crate::drivers::BlockDevice;
-use spin::mutex::Mutex;
 
 lazy_static::lazy_static!(
     pub static ref BLK_MANAGER: Arc<UPSafeCell<BlkManager>> = Arc::new(unsafe{ UPSafeCell::new(BlkManager::new()) });
@@ -147,23 +146,17 @@ impl Write for BlkCacheManager {
 
 impl Seek for BlkCacheManager {
     fn seek(&mut self, pos: super::io::SeekFrom) -> Result<u64, Self::Error> {
-        let new_offset_opt: Option<u32> = match pos {
-            SeekFrom::Start(x) => u32::try_from(x).ok(),
-            SeekFrom::Current(x) => u32::try_from(self.pos + x as usize).ok(),
+        let new_offset_opt = match pos {
+            SeekFrom::Start(x) => x as u32,
+            SeekFrom::Current(x) => (self.pos as i64 + x) as u32,
             SeekFrom::End(_) => panic!("Seek Error"),
         };
-        self.pos = new_offset_opt.unwrap() as usize;
+        self.pos = new_offset_opt as usize;
         Ok(0)
     }
 }
 
-impl Iterator for BlkCacheManager {
-    type Item = Arc<Mutex<BlockCache>>;
-    fn next(&mut self) -> Option<Self::Item> {
-        let blk_cache = BlockCache::new(self.pos, self.block_driver.clone());
-        Some(Arc::new(Mutex::new(blk_cache)))
-    }
-}
+
 
 pub struct BlkManager {
     driver: Arc<dyn BlockDevice>,

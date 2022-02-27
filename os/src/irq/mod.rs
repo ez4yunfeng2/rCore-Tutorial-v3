@@ -1,6 +1,6 @@
 use alloc::{collections::{BTreeMap, VecDeque}, sync::Arc};
 use k210_pac::Interrupt;
-use k210_soc::{plic::{plic_enable, clear_irq,set_thershold, set_priority, current_irq}, sysctl::dma_channel, dmac::{channel_interrupt_clear, enable_channel_interrupt}};
+use k210_soc::plic::{plic_enable, set_thershold, set_priority, current_irq};
 use lazy_static::lazy_static;
 use crate::{sync::UPSafeCell, task::TaskControlBlock, sbi::sbi_rustsbi_k210_sext, drivers::BLOCK_DEVICE};
 
@@ -39,23 +39,20 @@ impl IrqManager {
 pub fn irq_init() {
     sbi_rustsbi_k210_sext(handler_ext_interrupt as usize);
     set_thershold(0);
-    enable_channel_interrupt(dma_channel::CHANNEL0);
     IRQMANAGER.exclusive_access().register_irq(Interrupt::DMA0);
-    println!("handler_ext_interrupt {:#x}",handler_ext_interrupt as usize);
+    println!("Interrupt Init Ok");
 }
 
 pub fn handler_ext_interrupt() {
+    let irq = current_irq();
+    println!("[irq] {}",irq);
     unsafe {
         let ptr = k210_pac::DMAC::ptr();
-        ;
         println!("Status {:#x}",(*ptr).channel[0].status.read().bits());
+        println!("Status {:#x}",(*ptr).channel[0].intstatus_en.read().bits());
+        println!("Status {:#x}",(*ptr).channel[0].intstatus.read().bits());
     }
-    
-    let irq = current_irq();
-    println!("Fuck You {}",irq);
-    
-    channel_interrupt_clear(dma_channel::CHANNEL0);
-    // clear_irq();
+
 }
 
 pub fn wait_for_irq(source:Interrupt) {

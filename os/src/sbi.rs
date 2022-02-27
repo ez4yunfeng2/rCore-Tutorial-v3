@@ -11,7 +11,7 @@ const SBI_REMOTE_FENCE_I: usize = 5;
 const SBI_REMOTE_SFENCE_VMA: usize = 6;
 const SBI_REMOTE_SFENCE_VMA_ASID: usize = 7;
 const SBI_SHUTDOWN: usize = 8;
-
+const LEGACY_SEND_IPI: usize = 4;
 #[inline(always)]
 fn sbi_call(which: usize, arg0: usize, arg1: usize, arg2: usize) -> usize {
     let mut ret;
@@ -43,6 +43,12 @@ pub fn console_getchar() -> usize {
         }
     }
 }
+
+pub fn send_ipi(hartid:usize) {
+    let hartid_mask = 1usize << hartid;
+    sbi_call(LEGACY_SEND_IPI, &hartid_mask as *const usize as usize, 0, 0);
+}
+
 #[inline]
 pub fn sbi_rustsbi_k210_sext(func:usize) {
     sbi_call(0x0A000004, func, 0, 0);

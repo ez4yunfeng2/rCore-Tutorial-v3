@@ -103,9 +103,6 @@ impl BiosParameterBlock {
         Ok(bpb)
     }
     pub fn is_fat32(&self) -> bool {
-        // because this field must be zero on FAT32, and
-        // because it must be non-zero on FAT12/FAT16,
-        // this provides a simple way to detect FAT32
         self.sectors_per_fat_16 == 0
     }
     pub fn root_dir_sectors(&self) -> u32 {
