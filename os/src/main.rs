@@ -50,23 +50,23 @@ pub fn rust_main(hartid:usize) -> ! {
         clear_bss();
         mm::init();
         mm::remap_test();
-        // irq::irq_init();
         trap::init();
         trap::enable_timer_interrupt();
-        timer::set_next_trigger();
+        // timer::set_next_trigger();
         println!("[kernel] Lotus core {}",hartid);
         println!("{}",include_str!("banner"));
         fatfs::fs_init();
         task::add_initproc();
         send_ipi(1);
-        task::run_tasks(hartid);
+        unsafe{ asm!("mv tp, {}",in(reg) hartid) }
     } else {
         mm::activate();
-        // trap::init();
-        // trap::enable_timer_interrupt();
+        trap::init();
+        trap::enable_timer_interrupt();
+        // timer::set_next_trigger();
         println!("Init hart 1 {:#x}",satp::read().bits());
-        task::run_tasks(hartid);
-        
+        unsafe{ asm!("mv tp, {}",in(reg) hartid) }
     }
+    task::run_tasks(hartid);
     panic!("Unreachable in rust_main!");
 }

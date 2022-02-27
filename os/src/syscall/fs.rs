@@ -56,7 +56,7 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     let path = translated_str(token, path).replace("./", "");
-    println!("Open: {}",path);
+    println!("[sys_open]: {}",path);
     let dir = if fd >= 0 {
         let fd = fd as usize;
         if let Some(dir) = inner.fd_table.get(&fd).unwrap() {

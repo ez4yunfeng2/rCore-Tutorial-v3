@@ -18,12 +18,13 @@ pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 pub use manager::add_task;
 pub use processor::{
-    current_kstack_top, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, run_tasks, schedule, take_current_task,
+    current_process, current_task, current_trap_cx, current_trap_cx_user_va,
+    current_user_token, run_tasks, schedule, take_current_task, current_hartid
 };
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub fn suspend_current_and_run_next() {
+    // println!("suspend_current_and_run_next");
     // There must be an application running.
     let task = take_current_task().unwrap();
 

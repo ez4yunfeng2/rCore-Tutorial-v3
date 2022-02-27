@@ -4,6 +4,7 @@ use super::{ProcessControlBlock, TaskContext, TaskControlBlock};
 use crate::trap::TrapContext;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use k210_soc::sleep::usleep;
 use lazy_static::*;
 use spin::mutex::Mutex;
 
@@ -34,12 +35,21 @@ lazy_static! {
     pub static ref PROCESSORS: Mutex<BTreeMap<usize,Processor>> = Mutex::new( BTreeMap::new()) ;
 }
 
+pub fn current_hartid() -> usize {
+    let mut tp:usize;
+    unsafe { asm!("mv {}, tp", out(reg) tp) };
+    tp
+}
+
 pub fn run_tasks(hartid : usize) {
     PROCESSORS.lock().insert(hartid, Processor::new() );
     loop {
+        usleep(1000000);
+        // println!("hartid {} {}",hartid, current_hartid());
         let mut processors = PROCESSORS.lock();
         let mut processor = processors.get_mut(&hartid).unwrap();
         if let Some(task) = fetch_task() {
+            println!("[GetTask]: {}",hartid);
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
@@ -50,27 +60,26 @@ pub fn run_tasks(hartid : usize) {
             processor.current = Some(task);
             // release processor manually
             drop(processors);
+            // println!("]  hartid: {} {:#x} {:#x}",hartid,idle_task_cx_ptr as usize,next_task_cx_ptr as usize);
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
         } else {
-            println!("no tasks available in run_tasks core {}", hartid);
+            println!("no tasks available in run_tasks hartid {}", hartid);
         }
     }
 }
 
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
     let mut core_manager = PROCESSORS.lock();
-    let processor = core_manager.get_mut(&0).unwrap();
+    let processor = core_manager.get_mut(&current_hartid()).unwrap();
     processor.take_current()
-    // PROCESSOR.exclusive_access().take_current()
 }
 
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
     let core_manager = PROCESSORS.lock();
-    let processor = core_manager.get(&0).unwrap();
+    let processor = core_manager.get(&current_hartid()).unwrap();
     processor.current()
-    // PROCESSOR.exclusive_access().current()
 }
 
 pub fn current_process() -> Arc<ProcessControlBlock> {
@@ -100,16 +109,16 @@ pub fn current_trap_cx_user_va() -> usize {
         .trap_cx_user_va()
 }
 
-pub fn current_kstack_top() -> usize {
-    match current_task() {
-        Some(task) => task.kstack.get_top(),
-        None => 0,
-    }
-}
+// pub fn current_kstack_top() -> usize {
+//     match current_task() {
+//         Some(task) => task.kstack.get_top(),
+//         None => 0,
+//     }
+// }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     let mut core_manager = PROCESSORS.lock();
-    let processor = core_manager.get_mut(&0).unwrap();
+    let processor = core_manager.get_mut(&current_hartid()).unwrap();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(core_manager);
     unsafe {

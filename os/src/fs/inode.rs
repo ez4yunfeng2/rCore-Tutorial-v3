@@ -81,12 +81,16 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
             Arc::new(unsafe { UPSafeCell::new(file) }),
         )))
     } else {
-        let file = root_dir().open(path,false).unwrap();
-        Some(Arc::new(OSInode::new(
-            readable,
-            writable,
-            Arc::new(unsafe { UPSafeCell::new(file) }),
-        )))
+        if let Some(file) = root_dir().open(path,false) {
+            Some(Arc::new(OSInode::new(
+                readable,
+                writable,
+                Arc::new(unsafe { UPSafeCell::new(file) }),
+            )))
+        } else {
+            None
+        }
+        
     }
 }
 
