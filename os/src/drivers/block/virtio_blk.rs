@@ -20,13 +20,13 @@ lazy_static! {
 impl BlockDevice for VirtIOBlock {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
         self.0
-            .exclusive_access()
+            .inner.borrow_mut()
             .read_block(block_id, buf)
             .expect("Error when reading VirtIOBlk");
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
         self.0
-            .exclusive_access()
+            .inner.borrow_mut()
             .write_block(block_id, buf)
             .expect("Error when writing VirtIOBlk");
     }
@@ -53,7 +53,7 @@ pub extern "C" fn virtio_dma_alloc(pages: usize) -> PhysAddr {
             ppn_base = frame.ppn;
         }
         assert_eq!(frame.ppn.0, ppn_base.0 + i);
-        QUEUE_FRAMES.exclusive_access().push(frame);
+        QUEUE_FRAMES.inner.borrow_mut().push(frame);
     }
     ppn_base.into()
 }

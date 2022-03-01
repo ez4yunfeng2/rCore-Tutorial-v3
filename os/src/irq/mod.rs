@@ -39,7 +39,7 @@ impl IrqManager {
 pub fn irq_init() {
     sbi_rustsbi_k210_sext(handler_ext_interrupt as usize);
     set_thershold(0);
-    IRQMANAGER.exclusive_access().register_irq(Interrupt::DMA0);
+    IRQMANAGER.inner.borrow_mut().register_irq(Interrupt::DMA0);
     println!("Interrupt Init Ok");
 }
 
@@ -56,5 +56,5 @@ pub fn handler_ext_interrupt() {
 }
 
 pub fn wait_for_irq(source:Interrupt) {
-    IRQMANAGER.exclusive_access().irq_wait(source)
+    IRQMANAGER.inner.borrow_mut().irq_wait(source)
 }

@@ -101,7 +101,7 @@ impl Seek for FileEntry {
             }
         };
         self.disk
-            .exclusive_access()
+            .inner.borrow_mut()
             .seek(SeekFrom::Start(disk_offset))
             .unwrap();
         Ok(self.pos)
@@ -110,7 +110,7 @@ impl Seek for FileEntry {
 
 impl Read for FileEntry {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut disk = self.disk.exclusive_access();
+        let mut disk = self.disk.inner.borrow_mut();
         let off = self.size() - self.pos;
         disk.seek(SeekFrom::Start(
             cluster_to_offset(self.entry.inner().first_cluster().unwrap()) + self.pos,

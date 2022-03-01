@@ -31,7 +31,6 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
     let inner = process.inner_exclusive_access();
-
     if !inner.fd_table.contains_key(&fd) {
         return -1;
     }

@@ -43,16 +43,16 @@ fn clear_bss() {
     }
 }
 
+
 #[no_mangle]
 pub fn rust_main(hartid:usize) -> ! {
-
     if hartid == 0 {
         clear_bss();
         mm::init();
         mm::remap_test();
         trap::init();
         trap::enable_timer_interrupt();
-        // timer::set_next_trigger();
+        timer::set_next_trigger();
         println!("[kernel] Lotus core {}",hartid);
         println!("{}",include_str!("banner"));
         fatfs::fs_init();
@@ -63,10 +63,10 @@ pub fn rust_main(hartid:usize) -> ! {
         mm::activate();
         trap::init();
         trap::enable_timer_interrupt();
-        // timer::set_next_trigger();
+        timer::set_next_trigger();
         println!("Init hart 1 {:#x}",satp::read().bits());
-        unsafe{ asm!("mv tp, {}",in(reg) hartid) }
     }
+    unsafe{ asm!("mv tp, {}",in(reg) hartid) }
     task::run_tasks(hartid);
     panic!("Unreachable in rust_main!");
 }

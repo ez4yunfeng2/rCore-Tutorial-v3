@@ -3,24 +3,28 @@ use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
-use core::cell::RefMut;
+use core::cell::{RefMut, BorrowMutError};
 
 pub struct TaskControlBlock {
     // immutable
     pub process: Weak<ProcessControlBlock>,
     pub kstack: KernelStack,
     // mutable
-    inner: UPSafeCell<TaskControlBlockInner>,
+    pub inner: UPSafeCell<TaskControlBlockInner>,
 }
 
 impl TaskControlBlock {
+    pub fn try_inner_exclusive_access(&self) -> Result<RefMut<'_, TaskControlBlockInner>, BorrowMutError> {
+        self.inner.try_exclusive_access()
+    }
+
     pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
         self.inner.exclusive_access()
     }
 
     pub fn get_user_token(&self) -> usize {
         let process = self.process.upgrade().unwrap();
-        let inner = process.inner_exclusive_access();
+        let inner = process.inner.lock();
         inner.memory_set.token()
     }
 }

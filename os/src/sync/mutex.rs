@@ -24,7 +24,7 @@ impl MutexSpin {
 impl Mutex for MutexSpin {
     fn lock(&self) {
         loop {
-            let mut locked = self.locked.exclusive_access();
+            let mut locked = self.locked.inner.borrow_mut();
             if *locked {
                 drop(locked);
                 suspend_current_and_run_next();
@@ -37,7 +37,7 @@ impl Mutex for MutexSpin {
     }
 
     fn unlock(&self) {
-        let mut locked = self.locked.exclusive_access();
+        let mut locked = self.locked.inner.borrow_mut();
         *locked = false;
     }
 }

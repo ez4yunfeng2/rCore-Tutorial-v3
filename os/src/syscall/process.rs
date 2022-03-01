@@ -84,7 +84,10 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         let process = current_process();
         let mut inner = process.inner_exclusive_access();
         if let Some((idx, _)) = inner.children.iter().enumerate().find(|(_, p)| {
-            p.inner_exclusive_access().is_zombie && (pid == -1 || pid as usize == p.getpid())
+            match p.try_inner_exclusive_access() {
+                Some(proc) => proc.is_zombie && (pid == -1 || pid as usize == p.getpid()),
+                None => false,
+            }
         }) {
             let child = inner.children.remove(idx);
             assert_eq!(Arc::strong_count(&child), 1);

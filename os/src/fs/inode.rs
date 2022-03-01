@@ -30,7 +30,7 @@ impl OSInode {
     pub fn read_all(&self) -> Vec<u8> {
         let inner = self.inner.exclusive_access();
         let offset = inner.offset;
-        let v = inner.inode.exclusive_access().read_all(offset);
+        let v = inner.inode.inner.borrow_mut().read_all(offset);
         v
     }
 }
@@ -106,7 +106,7 @@ impl File for OSInode {
         let mut total_read_size = 0usize;
         for slice in buf.buffers.iter_mut() {
             let offset = inner.offset;
-            let len = inner.inode.exclusive_access().read(offset, *slice);
+            let len = inner.inode.inner.borrow_mut().read(offset, *slice);
             if len == 0 {
                 break;
             }
@@ -121,7 +121,7 @@ impl File for OSInode {
         let mut total_write_size = 0usize;
         for slice in buf.buffers.iter_mut() {
             let offset = inner.offset;
-            let len = inner.inode.exclusive_access().write(offset, *slice);
+            let len = inner.inode.inner.borrow_mut().write(offset, *slice);
             if len == 0 {
                 break;
             }
@@ -132,7 +132,7 @@ impl File for OSInode {
     }
     fn create(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
         let inner = self.inner.exclusive_access();
-        let mut inner = inner.inode.exclusive_access();
+        let mut inner = inner.inode.inner.borrow_mut();
         if let Some(inode) = inner.create(name, isdir) {
             let os_inode = OSInode::new(read, write, Arc::new(unsafe { UPSafeCell::new(inode) }));
             Some(Arc::new(os_inode))
@@ -143,7 +143,7 @@ impl File for OSInode {
 
     fn open(&self, name: &str, read: bool, write: bool, isdir:bool) -> Option<Arc<OSInode>> {
         let inner = self.inner.exclusive_access();
-        let mut inner = inner.inode.exclusive_access();
+        let mut inner = inner.inode.inner.borrow_mut();
         if let Some(inode) = inner.open(name,isdir) {
             let os_inode = OSInode::new(read, write, Arc::new(unsafe { UPSafeCell::new(inode) }));
             Some(Arc::new(os_inode))
@@ -153,26 +153,26 @@ impl File for OSInode {
     }
     fn name(&self) -> String {
         self.inner
-            .exclusive_access()
+            .inner.borrow_mut()
             .inode
-            .exclusive_access()
+            .inner.borrow_mut()
             .file_name()
     }
 
     fn seek(&self, offset: SeekFrom) -> usize {
         self.inner
-            .exclusive_access()
+            .inner.borrow_mut()
             .inode
-            .exclusive_access()
+            .inner.borrow_mut()
             .seek(offset)
     }
 
     fn kstat(&self,stat:&mut Kstat) {
-        self.inner.exclusive_access().inode.exclusive_access().stat(stat)
+        self.inner.exclusive_access().inode.inner.borrow_mut().stat(stat)
     }
 
     fn remove(&self, path:&str) -> bool {
-        self.inner.exclusive_access().inode.exclusive_access().remove(path)
+        self.inner.exclusive_access().inode.inner.borrow_mut().remove(path)
     }
 }
 

@@ -467,7 +467,7 @@ impl DirEntry {
     }
 
     fn find_free_entries(&self, num_entries: u32) -> Result<BlkCacheManager, Error<()>> {
-        let mut stream = self.disk.exclusive_access();
+        let mut stream = self.disk.inner.borrow_mut();
         let mut first_free: u32 = 0;
         let mut num_free: u32 = 0;
         let mut i: u32 = 0;
@@ -531,7 +531,7 @@ impl DirEntry {
         let (mut stream, start_pos) =
             self.alloc_and_write_lfn_entries(&lfn_utf16, raw_entry.name())?;
         raw_entry.serialize(&mut stream)?;
-        let entry_pos = self.disk.exclusive_access().pos as u64 - DIR_ENTRY_SIZE as u64;
+        let entry_pos = self.disk.inner.borrow_mut().pos as u64 - DIR_ENTRY_SIZE as u64;
         let end_pos = stream.seek(io::SeekFrom::Current(0))?;
         let short_name = ShortName::new(raw_entry.name());
         let offset = 0;
@@ -644,7 +644,7 @@ impl DirEntry {
 
     pub fn read_next_entry(&mut self) -> Result<Option<DirEntry>, Error<()>> {
         let mut lfn_builder = LongNameBuilder::new();
-        let mut offset = self.disk.exclusive_access().seek(SeekFrom::Current(0))?;
+        let mut offset = self.disk.inner.borrow_mut().seek(SeekFrom::Current(0))?;
         let mut begin_offset = offset;
         loop {
             let raw_entry = DirEntryData::deserialize(self)?;
@@ -660,7 +660,7 @@ impl DirEntry {
             }
             match raw_entry {
                 DirEntryData::File(data) => {
-                    let entry_pos = self.disk.exclusive_access().pos as u64 - DIR_ENTRY_SIZE as u64;
+                    let entry_pos = self.disk.inner.borrow_mut().pos as u64 - DIR_ENTRY_SIZE as u64;
                     lfn_builder.validate_chksum(data.name());
                     let short_name = ShortName::new(data.name());
                     let mut blk = BlkCacheManager::new();
@@ -729,7 +729,7 @@ impl DirEntry {
         if let Some(_n) = e.dir_entry.first_cluster() {
             
         }
-        let mut stream = self.disk.exclusive_access();
+        let mut stream = self.disk.inner.borrow_mut();
         stream.seek(SeekFrom::Start(self.offset_range.0))?;
         let num = ((e.offset_range.1 - e.offset_range.0) / u64::from(DIR_ENTRY_SIZE)) as usize;
         for _ in 0..num {
@@ -775,7 +775,7 @@ impl Seek for DirEntry {
             }
         };
         self.disk
-            .exclusive_access()
+            .inner.borrow_mut()
             .seek(SeekFrom::Start(new_offset))
             .unwrap();
         Ok(new_offset)
@@ -784,7 +784,7 @@ impl Seek for DirEntry {
 
 impl Read for DirEntry {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut disk = self.disk.exclusive_access();
+        let mut disk = self.disk.inner.borrow_mut();
         self.offset += buf.len() as u64;
         disk.read(buf)
     }

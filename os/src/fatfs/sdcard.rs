@@ -104,7 +104,7 @@ impl Read for BlkCacheManager {
         while !buf.is_empty() {
             let offset = self.pos % 512;
             let blk_id = self.pos / 512;
-            let n = BLK_MANAGER.exclusive_access().read_block(blk_id, &mut buf, &|blk,buf |{
+            let n = BLK_MANAGER.inner.borrow_mut().read_block(blk_id, &mut buf, &|blk,buf |{
                 let len = cmp::min(buf.len(),512 - offset);
                 for idx in 0..len {
                     buf[idx] = blk.cache[offset + idx];
@@ -125,7 +125,7 @@ impl Write for BlkCacheManager {
         while !buf.is_empty() {
             let offset = self.pos % 512;
             let blk_id = self.pos / 512;
-            let n = BLK_MANAGER.exclusive_access().write_block(blk_id, &mut buf, &|blk,buf |{
+            let n = BLK_MANAGER.inner.borrow_mut().write_block(blk_id, &mut buf, &|blk,buf |{
                 let len = cmp::min(buf.len(),512 - offset);
                 for idx in 0..len {
                     blk.cache[offset + idx] = buf[idx];

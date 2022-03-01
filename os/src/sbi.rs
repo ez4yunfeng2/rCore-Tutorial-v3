@@ -1,7 +1,4 @@
 #![allow(unused)]
-
-
-
 const SBI_SET_TIMER: usize = 0;
 const SBI_CONSOLE_PUTCHAR: usize = 1;
 const SBI_CONSOLE_GETCHAR: usize = 2;
@@ -55,8 +52,7 @@ pub fn sbi_rustsbi_k210_sext(func:usize) {
 }
 
 pub fn shutdown() -> ! {
-    
-    unsafe{ asm!("wfi") }
+    loop{}
     // sbi_call(SBI_SHUTDOWN, 0, 0, 0);
     panic!("It should shutdown!");
 }

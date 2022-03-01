@@ -72,7 +72,7 @@ impl<IO: Read + Write + Seek> FileSystem<IO> {
         prev_cluster: Option<u32>,
         zero: bool,
     ) -> Result<u32, Error<IO::Error>> {
-        let hint = self.fs_info.exclusive_access().next_free_cluster;
+        let hint = self.fs_info.inner.borrow_mut().next_free_cluster;
         let cluster = {
             let mut fat = self.fat_slice();
             match alloc_cluster(&mut fat, prev_cluster, hint, self.total_clusters) {
@@ -81,11 +81,11 @@ impl<IO: Read + Write + Seek> FileSystem<IO> {
             }
         };
         if zero {
-            let mut disk = self.disk.exclusive_access();
+            let mut disk = self.disk.inner.borrow_mut();
             disk.seek(SeekFrom::Start(self.offset_from_cluster(cluster)))?;
             write_zeros(&mut *disk, u64::from(self.cluster_size()))?;
         }
-        let mut fs_info = self.fs_info.exclusive_access();
+        let mut fs_info = self.fs_info.inner.borrow_mut();
         fs_info.set_next_free_cluster(cluster + 1);
         fs_info.map_free_clusters(|n| n - 1);
         Ok(cluster)

@@ -3,7 +3,7 @@
 #![allow(unused)]
 
 use k210_pac::{Peripherals, SPI0};
-use k210_hal::prelude::*;
+use k210_hal::{prelude::*, cache::Uncache};
 use k210_soc::{
     gpio,
     gpiohs,
@@ -848,12 +848,12 @@ impl SDCardWrapper {
 
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {  
-        // self.0.exclusive_access().read_sector_dma(buf, block_id as u32).unwrap();
-        self.0.exclusive_access().read_sector(buf,block_id as u32).unwrap();
+        // self.0.try_exclusive_access().unwrap().read_sector_dma(buf, block_id as u32).unwrap();
+        self.0.try_exclusive_access().unwrap().read_sector(buf,block_id as u32).unwrap();
     }
     
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        self.0.exclusive_access().write_sector(buf,block_id as u32).unwrap();
+        self.0.try_exclusive_access().unwrap().write_sector(buf,block_id as u32).unwrap();
     }
 
     fn handler_interrupt(&self) {
