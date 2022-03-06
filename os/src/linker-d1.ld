@@ -6,7 +6,6 @@ SECTIONS
 {
     . = BASE_ADDRESS;
     skernel = .;
-
     stext = .;
     .text : {
         *(.text.entry)

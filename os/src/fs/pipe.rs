@@ -1,7 +1,7 @@
 use super::File;
+use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use crate::task::suspend_current_and_run_next;
-use crate::mm::UserBuffer;
 use alloc::{
     string::String,
     sync::{Arc, Weak},

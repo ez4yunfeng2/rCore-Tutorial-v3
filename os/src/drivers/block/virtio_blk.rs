@@ -20,13 +20,15 @@ lazy_static! {
 impl BlockDevice for VirtIOBlock {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
         self.0
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .read_block(block_id, buf)
             .expect("Error when reading VirtIOBlk");
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
         self.0
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .write_block(block_id, buf)
             .expect("Error when writing VirtIOBlk");
     }

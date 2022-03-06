@@ -2,21 +2,23 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use k210_pac::{Peripherals, SPI0};
-use k210_hal::{prelude::*, cache::Uncache};
-use k210_soc::{
-    gpio,
-    gpiohs,
-    spi::{aitm, frame_format, tmod, work_mode, SPI, SPIExt, SPIImpl},
-    fpioa::{self, io},
-    sysctl::{self, dma_channel},
-    sleep::usleep, dmac::{DMAC, DMACExt},
-};
-use log::error;
-use crate::sync::UPSafeCell;
-use lazy_static::*;
 use super::BlockDevice;
+use crate::sync::UPSafeCell;
 use core::convert::TryInto;
+use k210_hal::{cache::Uncache, prelude::*};
+use k210_pac::{Peripherals, SPI0};
+use k210_soc::{
+    dmac::{DMACExt, DMAC},
+    fpioa::{self, io},
+    gpio, gpiohs,
+    sleep::usleep,
+    spi::{aitm, frame_format, tmod, work_mode, SPIExt, SPIImpl, SPI},
+    sysctl::{self, dma_channel},
+};
+use lazy_static::*;
+use log::error;
+
+static mut DMA_CHUNK: [u32; 512] = [0; 512];
 
 pub struct SDCard<SPI> {
     spi: SPI,
@@ -160,13 +162,13 @@ pub struct SDCardInfo {
 }
 
 impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
-    pub fn new(spi: X, spi_cs: u32, cs_gpionum: u8, dmac: DMAC, channel :dma_channel) -> Self {
+    pub fn new(spi: X, spi_cs: u32, cs_gpionum: u8, dmac: DMAC, channel: dma_channel) -> Self {
         Self {
             spi,
             spi_cs,
             cs_gpionum,
             dmac,
-            channel
+            channel,
         }
     }
 
@@ -202,7 +204,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         self.spi.send_data(self.spi_cs, data);
     }
 
-    
     fn write_data_dma(&self, data: &[u32]) {
         self.spi.configure(
             work_mode::MODE0,
@@ -218,7 +219,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         self.spi
             .send_data_dma(&self.dmac, self.channel, self.spi_cs, data);
     }
-     
 
     fn read_data(&self, data: &mut [u8]) {
         self.spi.configure(
@@ -235,7 +235,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         self.spi.recv_data(self.spi_cs, data);
     }
 
-    
     fn read_data_dma(&self, data: &mut [u32]) {
         self.spi.configure(
             work_mode::MODE0,
@@ -251,7 +250,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         self.spi
             .recv_data_dma(&self.dmac, self.channel, self.spi_cs, data);
     }
-     
 
     /*
      * Send 5 bytes command to the SD card.
@@ -605,15 +603,14 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         }
         let mut error = false;
 
-
-        let mut tmp_chunk= [0u8; SEC_LEN];
+        let mut tmp_chunk = [0u8; SEC_LEN];
         for chunk in data_buf.chunks_mut(SEC_LEN) {
             if self.get_response() != SD_START_DATA_SINGLE_BLOCK_READ {
                 error = true;
                 break;
             }
             self.read_data(&mut tmp_chunk);
-            for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/tmp_chunk.iter()) {
+            for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/ tmp_chunk.iter()) {
                 //*a = (b & 0xff) as u8;
                 *a = *b;
             }
@@ -636,13 +633,6 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         }
     }
 
-    pub fn dump_dmac(&self) {
-        // println!("Status: {:#x} {:#x}",
-        //     self.dmac.dmac.intstatus.read().bits(),
-        //     self.dmac.dmac.com_intstatus_en.read().bits()
-        // )
-    }
-
     pub fn read_sector_dma(&self, data_buf: &mut [u8], sector: u32) -> Result<(), u8> {
         assert!(data_buf.len() >= SEC_LEN && (data_buf.len() % SEC_LEN) == 0);
         let flag = if data_buf.len() == SEC_LEN {
@@ -655,7 +645,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
 
         let response = self.get_response();
         if response != 0x00 {
-            println!("Error sector: {} {}",sector,response);
+            println!("Error sector: {} {}", sector, response);
             self.end_cmd();
             return Err(response);
         }
@@ -667,10 +657,16 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
                 error = true;
                 break;
             }
-            self.read_data_dma(&mut dma_chunk);
-            for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/dma_chunk.iter()) {
-                *a = (b & 0xff) as u8;
+            unsafe {
+                self.read_data_dma(&mut DMA_CHUNK);
+                for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/ DMA_CHUNK.iter()) {
+                    *a = (b & 0xff) as u8;
+                }
             }
+            // self.read_data_dma(&mut dma_chunk);
+            // for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/dma_chunk.iter()) {
+            //     *a = (b & 0xff) as u8;
+            // }
             let mut frame = [0u8; 2];
             self.read_data(&mut frame);
         }
@@ -680,9 +676,9 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             self.send_cmd(CMD::CMD12, 0, 0);
             self.get_response();
             self.end_cmd();
-            // self.end_cmd();
+            self.end_cmd();
         }
-        
+
         /* It is an error if not everything requested was read */
         if error {
             Err(123)
@@ -727,7 +723,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             /* Send the data token to signify the start of the data */
             self.write_data(&frame);
             /* Write the block data to SD : write count data by block */
-            for (a, &b) in /*dma_chunk*/tmp_chunk.iter_mut().zip(chunk.iter()) {
+            for (a, &b) in /*dma_chunk*/ tmp_chunk.iter_mut().zip(chunk.iter()) {
                 //*a = b.into();
                 *a = b;
             }
@@ -775,7 +771,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             /* Send the data token to signify the start of the data */
             self.write_data(&frame);
             /* Write the block data to SD : write count data by block */
-            for (a, &b) in /*dma_chunk*/dma_chunk.iter_mut().zip(chunk.iter()) {
+            for (a, &b) in /*dma_chunk*/ dma_chunk.iter_mut().zip(chunk.iter()) {
                 *a = b.into();
             }
             self.write_data_dma(&mut dma_chunk);
@@ -810,9 +806,8 @@ fn io_init() {
 }
 
 lazy_static! {
-    static ref PERIPHERALS: UPSafeCell<Peripherals> = unsafe {
-        UPSafeCell::new(Peripherals::take().unwrap())
-    };
+    static ref PERIPHERALS: UPSafeCell<Peripherals> =
+        unsafe { UPSafeCell::new(Peripherals::take().unwrap()) };
 }
 
 fn init_sdcard() -> SDCard<SPIImpl<SPI0>> {
@@ -829,7 +824,7 @@ fn init_sdcard() -> SDCard<SPIImpl<SPI0>> {
     let dmac = ptr.DMAC.configure();
     io_init();
     let spi = peripherals.SPI0.constrain();
-    let sd = SDCard::new(spi, SD_CS, SD_CS_GPIONUM,dmac,channel);
+    let sd = SDCard::new(spi, SD_CS, SD_CS_GPIONUM, dmac, channel);
     let info = sd.init().unwrap();
     let num_sectors = info.CardCapacity / 512;
     assert!(num_sectors > 0);
@@ -847,13 +842,22 @@ impl SDCardWrapper {
 }
 
 impl BlockDevice for SDCardWrapper {
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) {  
-        // self.0.try_exclusive_access().unwrap().read_sector_dma(buf, block_id as u32).unwrap();
-        self.0.try_exclusive_access().unwrap().read_sector(buf,block_id as u32).unwrap();
+    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
+        // println!("[read] {} {:#x}", block_id, buf.as_ptr() as usize);
+        self.0
+            .try_exclusive_access()
+            .unwrap()
+            .read_sector_dma(buf, block_id as u32)
+            .unwrap();
+        // self.0.try_exclusive_access().unwrap().read_sector(buf,block_id as u32).unwrap();
     }
-    
+
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        self.0.try_exclusive_access().unwrap().write_sector(buf,block_id as u32).unwrap();
+        self.0
+            .try_exclusive_access()
+            .unwrap()
+            .write_sector(buf, block_id as u32)
+            .unwrap();
     }
 
     fn handler_interrupt(&self) {

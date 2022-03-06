@@ -83,7 +83,8 @@ impl Drop for KernelStack {
         let (kernel_stack_bottom, _) = kernel_stack_position(self.0);
         let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
         KERNEL_SPACE
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
 }
@@ -129,7 +130,7 @@ impl TaskUserRes {
         alloc_user_res: bool,
     ) -> Self {
         let tid = process.inner_exclusive_access().alloc_tid();
-        
+
         let task_user_res = Self {
             tid,
             ustack_base,
@@ -213,17 +214,15 @@ impl TaskUserRes {
     pub fn ustack_base(&self) -> usize {
         self.ustack_base
     }
-    
+
     pub fn ustack_top(&self) -> usize {
         ustack_bottom_from_tid(self.ustack_base, self.tid) + USER_STACK_SIZE
     }
 
-    pub fn brk(&mut self,offset: usize) -> usize {
-        println!("brk_addr: {:#x} {:#x}",self.brk_addr,self.ustack_base);
+    pub fn brk(&mut self, offset: usize) -> usize {
+        println!("brk_addr: {:#x} {:#x}", self.brk_addr, self.ustack_base);
         match offset {
-            0 => {
-                self.brk_addr
-            }
+            0 => self.brk_addr,
             _ => {
                 self.brk_addr = offset;
                 self.brk_addr

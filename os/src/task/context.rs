@@ -15,7 +15,7 @@ impl TaskContext {
             s: [0; 12],
         }
     }
-    
+
     pub fn goto_trap_return(kstack_ptr: usize) -> Self {
         Self {
             ra: trap_return as usize,

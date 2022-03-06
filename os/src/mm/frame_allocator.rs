@@ -101,7 +101,8 @@ pub fn init_frame_allocator() {
 
 pub fn frame_alloc() -> Option<FrameTracker> {
     FRAME_ALLOCATOR
-        .inner.borrow_mut()
+        .inner
+        .borrow_mut()
         .alloc()
         .map(|ppn| FrameTracker::new(ppn))
 }

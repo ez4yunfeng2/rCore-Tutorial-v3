@@ -607,7 +607,15 @@ impl DMAC {
 
     /** Wait for dmac work done. */
     pub fn wait_done(&self, channel_num: dma_channel) {
-        self.wait_idle(channel_num);
+
+        extern "C" {
+            fn wait_for_irq();
+        }
+        while !self.is_idle(channel_num) {}
+        unsafe { wait_for_irq() }
+        
+        
+        // self.wait_idle(channel_num);
     }
 
     /** Determine if a DMA channel is idle or not. */
@@ -636,4 +644,12 @@ impl DMAC {
 
 // TODO: completion IRQ functionality
 
+}
+
+pub fn channel_interrupt_clear(channel:dma_channel) {
+    unsafe {
+        let ptr = k210_pac::DMAC::ptr();
+        (*ptr).channel[channel.idx()].intclear
+        .write(|w| w.bits(0xffffffff));
+    }
 }

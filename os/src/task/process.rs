@@ -204,20 +204,19 @@ impl ProcessControlBlock {
         // create child process pcb
         let child = Arc::new(Self {
             pid,
-            inner:
-                spin::mutex::Mutex::new(ProcessControlBlockInner {
-                    is_zombie: false,
-                    memory_set,
-                    parent: Some(Arc::downgrade(self)),
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: btree,
-                    tasks: Vec::new(),
-                    task_res_allocator: RecycleAllocator::new(),
-                    mutex_list: Vec::new(),
-                    semaphore_list: Vec::new(),
-                    dir_entry: parent.dir_entry.clone(),
-                })
+            inner: spin::mutex::Mutex::new(ProcessControlBlockInner {
+                is_zombie: false,
+                memory_set,
+                parent: Some(Arc::downgrade(self)),
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: btree,
+                tasks: Vec::new(),
+                task_res_allocator: RecycleAllocator::new(),
+                mutex_list: Vec::new(),
+                semaphore_list: Vec::new(),
+                dir_entry: parent.dir_entry.clone(),
+            }),
         });
         // add child
         parent.children.push(Arc::clone(&child));

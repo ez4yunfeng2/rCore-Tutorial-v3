@@ -1,18 +1,21 @@
 use alloc::string::String;
 use bitflags::bitflags;
-use core::{mem::size_of, convert::TryInto};
+use core::{convert::TryInto, mem::size_of};
 use k210_pac::aes::en;
 use log::{error, info};
 
 use super::{
     alloc_cluster, cluster_to_offset,
     file::{FileEntry, Inode},
-    io::{self, Error, IoBase, Read, ReadLeExt, Seek, SeekFrom, Write, WriteLeExt, IoError},
+    fs::DiskSlice,
+    io::{self, Error, IoBase, IoError, Read, ReadLeExt, Seek, SeekFrom, Write, WriteLeExt},
     lfn::{
         char_to_uppercase, lfn_checksum, validate_long_name, LfnBuffer, LfnEntriesGenerator,
         ShortNameGenerator, DIR_ENTRY_DELETED_FLAG, DIR_ENTRY_SIZE, SFN_SIZE,
     },
-    sdcard::BlkCacheManager, time::{DateTime, Date, Time, get_current_date_time}, FATFS, fs::DiskSlice,
+    sdcard::BlkCacheManager,
+    time::{get_current_date_time, Date, DateTime, Time},
+    FATFS,
 };
 use crate::{
     fatfs::lfn::{LongNameBuilder, ShortName, LFN_PART_LEN},
@@ -164,7 +167,6 @@ impl DirFileEntry {
 
     pub fn accessed(&self) -> Date {
         Date::decode(self.access_date)
-        
     }
 
     pub fn modified(&self) -> DateTime {
@@ -326,7 +328,6 @@ impl DirEntryData {
             };
             Ok(DirEntryData::File(data))
         }
-        
     }
 
     pub fn is_end(&self) -> bool {
@@ -342,7 +343,6 @@ impl DirEntryData {
             DirEntryData::Lfn(lfn) => lfn.set_deleted(),
         }
     }
-
 }
 
 pub struct DirEntry {
@@ -373,7 +373,7 @@ impl DirEntry {
             short_name: ShortName::new(b"/          "),
             lfn_utf16: LfnBuffer::new(),
             entry_pos: 0,
-            offset_range: (0,0)
+            offset_range: (0, 0),
         }
     }
     pub fn new(first_cluster: u32) -> Self {
@@ -388,7 +388,7 @@ impl DirEntry {
             short_name: ShortName::new(b"  root     "),
             lfn_utf16: LfnBuffer::new(),
             entry_pos: 0,
-            offset_range: (0, 0)
+            offset_range: (0, 0),
         }
     }
     pub fn long_file_name_as_ucs2_units(&self) -> Option<&[u16]> {
@@ -536,7 +536,7 @@ impl DirEntry {
         let short_name = ShortName::new(raw_entry.name());
         let offset = 0;
         let disk = unsafe { UPSafeCell::new(BlkCacheManager::new()) };
-        let offset_range = (start_pos,end_pos);
+        let offset_range = (start_pos, end_pos);
         Ok(DirEntry {
             dir_entry: raw_entry,
             short_name,
@@ -544,7 +544,7 @@ impl DirEntry {
             entry_pos,
             offset,
             disk,
-            offset_range
+            offset_range,
         })
     }
 
@@ -581,7 +581,8 @@ impl DirEntry {
             DirEntryOrShortName::DirEntry(e) => Ok(Inode::Dir(e)),
             DirEntryOrShortName::ShortName(short_name) => {
                 let cluster = alloc_cluster(None, true).unwrap();
-                let sfn_entry = self.create_sfn_entry(short_name, DirAttr::DIRECTORY, Some(cluster));
+                let sfn_entry =
+                    self.create_sfn_entry(short_name, DirAttr::DIRECTORY, Some(cluster));
                 let mut entry = self.write_entry(name, sfn_entry)?;
                 let dot_sfn = ShortNameGenerator::generate_dot();
                 let sfn_entry = self.create_sfn_entry(
@@ -679,7 +680,7 @@ impl DirEntry {
                             short_name,
                             entry_pos,
                             lfn_utf16: lfn_builder.into_buf(),
-                            offset_range: (begin_offset, offset)
+                            offset_range: (begin_offset, offset),
                         })
                     });
                 }
@@ -716,9 +717,9 @@ impl DirEntry {
         FileEntry::from(self.dir_entry, self.entry_pos, self.file_name())
     }
 
-    pub fn remove(&mut self, path:&str) -> Result<(),Error<()>> {
+    pub fn remove(&mut self, path: &str) -> Result<(), Error<()>> {
         let (name, rest_opt) = split_path(path);
-        if let Some(rest) = rest_opt {   
+        if let Some(rest) = rest_opt {
             let mut e = self.find_entry(name, Some(true))?;
             return e.remove(rest);
         }
@@ -726,9 +727,7 @@ impl DirEntry {
         if e.is_dir() && !e.is_empty() {
             return Err(Error::DirectoryIsNotEmpty);
         }
-        if let Some(_n) = e.dir_entry.first_cluster() {
-            
-        }
+        if let Some(_n) = e.dir_entry.first_cluster() {}
         let mut stream = self.disk.inner.borrow_mut();
         stream.seek(SeekFrom::Start(self.offset_range.0))?;
         let num = ((e.offset_range.1 - e.offset_range.0) / u64::from(DIR_ENTRY_SIZE)) as usize;
@@ -775,7 +774,8 @@ impl Seek for DirEntry {
             }
         };
         self.disk
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .seek(SeekFrom::Start(new_offset))
             .unwrap();
         Ok(new_offset)

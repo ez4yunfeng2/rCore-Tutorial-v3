@@ -9,15 +9,20 @@ pub mod sdcard;
 pub mod table;
 pub mod time;
 use alloc::{
+    collections::BTreeMap,
     sync::Arc,
-    vec::{self, Vec}, collections::BTreeMap,
+    vec::{self, Vec},
 };
 use fs::FileSystem;
 use lazy_static::lazy_static;
 use log::info;
 use sdcard::BlkCacheManager;
 
-use crate::{fatfs::io::{Read, Seek, SeekFrom, Write}, drivers::BLOCK_DEVICE, fs::File};
+use crate::{
+    drivers::BLOCK_DEVICE,
+    fatfs::io::{Read, Seek, SeekFrom, Write},
+    fs::File,
+};
 
 use self::{
     dir_entry::DirEntry,
@@ -28,7 +33,6 @@ lazy_static! {
     pub static ref FATFS: Arc<FileSystem<BlkCacheManager>> =
         Arc::new(FileSystem::new(BlkCacheManager::new()).unwrap());
 }
-
 
 pub fn fs_init() {
     root_dir().ls()

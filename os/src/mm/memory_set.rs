@@ -201,8 +201,8 @@ impl MemorySet {
         }
 
         let map_perm = MapPermission::R | MapPermission::W | MapPermission::U;
-        let start_va:VirtAddr = max_end_vpn.into();
-        let end_va:VirtAddr = (start_va.0  + 2 * PAGE_SIZE).into();
+        let start_va: VirtAddr = max_end_vpn.into();
+        let end_va: VirtAddr = (start_va.0 + 2 * PAGE_SIZE).into();
         let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
         memory_set.push(map_area, None);
 
@@ -240,7 +240,7 @@ impl MemorySet {
             satp::write(satp);
             asm!("sfence.vma");
         }
-        println!("satp {:#x}",satp::read().bits())
+        println!("satp {:#x}", satp::read().bits())
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)

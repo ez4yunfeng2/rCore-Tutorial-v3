@@ -1,5 +1,5 @@
-use crate::sync::UPSafeCell;
 use super::BlockDevice;
+use crate::sync::UPSafeCell;
 use nezha_sdc::MmcHost;
 
 pub struct SDCardWrapper(UPSafeCell<MmcHost>);

@@ -23,8 +23,7 @@ impl TaskManager {
 }
 
 lazy_static! {
-    pub static ref TASK_MANAGER: Mutex<TaskManager> =
-        Mutex::new(TaskManager::new());
+    pub static ref TASK_MANAGER: Mutex<TaskManager> = Mutex::new(TaskManager::new());
 }
 
 pub fn add_task(task: Arc<TaskControlBlock>) {

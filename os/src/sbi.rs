@@ -1,4 +1,6 @@
 #![allow(unused)]
+
+use crate::handler_ext;
 const SBI_SET_TIMER: usize = 0;
 const SBI_CONSOLE_PUTCHAR: usize = 1;
 const SBI_CONSOLE_GETCHAR: usize = 2;
@@ -41,18 +43,18 @@ pub fn console_getchar() -> usize {
     }
 }
 
-pub fn send_ipi(hartid:usize) {
+pub fn send_ipi(hartid: usize) {
     let hartid_mask = 1usize << hartid;
     sbi_call(LEGACY_SEND_IPI, &hartid_mask as *const usize as usize, 0, 0);
 }
 
 #[inline]
-pub fn sbi_rustsbi_k210_sext(func:usize) {
-    sbi_call(0x0A000004, func, 0, 0);
+pub fn sbi_rustsbi_k210_sext() {
+    sbi_call(0x0A000004, handler_ext as usize, 0, 0);
 }
 
 pub fn shutdown() -> ! {
-    loop{}
+    loop {}
     // sbi_call(SBI_SHUTDOWN, 0, 0, 0);
     panic!("It should shutdown!");
 }

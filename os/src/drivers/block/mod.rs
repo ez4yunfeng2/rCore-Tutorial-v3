@@ -2,8 +2,8 @@ mod sdcard;
 mod sdcard_d1;
 mod virtio_blk;
 
-use alloc::sync::Arc;
 use super::BlockDevice;
+use alloc::sync::Arc;
 use lazy_static::*;
 
 #[cfg(feature = "board_qemu")]

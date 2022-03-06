@@ -260,9 +260,8 @@ impl<IF: SPI01> SPI for SPIImpl<IF> {
             self.spi
                 .ctrlr1
                 .write(|w| w.bits((rx.len() - 1).try_into().unwrap()));
-            
-            self.spi.dmacr.write(|w| w.bits(0x3)); /*enable dma receive */
             self.spi.ssienr.write(|w| w.bits(0x01));
+            self.spi.dmacr.write(|w| w.bits(0x3)); /*enable dma receive */
             sysctl::dma_select(channel_num, IF::DMA_RX);
             dmac.set_single_mode(
                 channel_num,
@@ -276,7 +275,6 @@ impl<IF: SPI01> SPI for SPIImpl<IF> {
             );
             self.spi.dr[0].write(|w| w.bits(0xffffffff));
             self.spi.ser.write(|w| w.bits(1 << chip_select));
-            // wait_irq_and_run_next(Interrupt::DMA0);
             dmac.wait_done(channel_num);
 
             self.spi.ser.write(|w| w.bits(0x00));

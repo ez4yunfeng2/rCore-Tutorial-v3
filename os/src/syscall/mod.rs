@@ -47,7 +47,7 @@ use process::*;
 use sync::*;
 use thread::*;
 
-use crate::fs::{Kstat, Dirent};
+use crate::fs::{Dirent, Kstat};
 
 use self::osinfo::TimeVal;
 
@@ -64,7 +64,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_OPEN => sys_open(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_PIPE => sys_pipe(args[0] as *mut i32),
-        SYSCALL_GETDENTS => sys_getdents(args[0] as isize, args[1] as * mut Dirent),
+        SYSCALL_GETDENTS => sys_getdents(args[0] as isize, args[1] as *mut Dirent),
         SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_FSTAT => sys_fstat(args[0] as isize, args[1] as *mut Kstat),
@@ -78,7 +78,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_FORK => sys_fork(),
         SYSCALL_EXEC => sys_exec(args[0] as *const u8, args[1] as *const usize),
-        SYSCALL_MMAP => sys_mmap(args[0],args[1],args[2],args[3],args[4],args[5]),
+        SYSCALL_MMAP => sys_mmap(args[0], args[1], args[2], args[3], args[4], args[5]),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] as *mut i32),
         SYSCALL_THREAD_CREATE => sys_thread_create(args[0], args[1]),
         SYSCALL_GETTID => sys_gettid(),

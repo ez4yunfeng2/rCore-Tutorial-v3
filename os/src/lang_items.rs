@@ -15,7 +15,11 @@ fn panic(info: &PanicInfo) -> ! {
                 location.column()
             );
         }
-        None => println!("[kernel] hartid {} panicked at '{}'", current_hartid(), info.message().unwrap()),
+        None => println!(
+            "[kernel] hartid {} panicked at '{}'",
+            current_hartid(),
+            info.message().unwrap()
+        ),
     }
     // unsafe {
     //     backtrace();

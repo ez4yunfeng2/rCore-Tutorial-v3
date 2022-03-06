@@ -6,9 +6,17 @@
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 
-use riscv::register::satp;
+use k210_pac::Interrupt;
+use k210_soc::{
+    dmac::channel_interrupt_clear,
+    plic::{plic_enable, set_priority, set_thershold},
+    sysctl::dma_channel,
+};
 
-use crate::sbi::send_ipi;
+use crate::{
+    sbi::sbi_rustsbi_k210_sext,
+    sync::UPSafeCell,
+};
 
 extern crate alloc;
 
@@ -43,30 +51,65 @@ fn clear_bss() {
     }
 }
 
-
 #[no_mangle]
-pub fn rust_main(hartid:usize) -> ! {
+pub fn rust_main(hartid: usize) -> ! {
     if hartid == 0 {
         clear_bss();
         mm::init();
         mm::remap_test();
         trap::init();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
-        println!("[kernel] Lotus core {}",hartid);
-        println!("{}",include_str!("banner"));
+        // trap::enable_timer_interrupt();
+        // timer::set_next_trigger();
+        // irq::irq_init();
+        println!("[kernel] Lotus core {}", hartid);
+        println!("{}", include_str!("banner"));
+        {
+            sbi_rustsbi_k210_sext();
+            set_thershold(0);
+            plic_enable(Interrupt::DMA0);
+            set_priority(Interrupt::DMA0,1);
+        }
         fatfs::fs_init();
         task::add_initproc();
-        send_ipi(1);
-        unsafe{ asm!("mv tp, {}",in(reg) hartid) }
+        // send_ipi(1);
     } else {
         mm::activate();
         trap::init();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-        println!("Init hart 1 {:#x}",satp::read().bits());
+        println!("Init hart 1 ");
+        loop {}
     }
-    unsafe{ asm!("mv tp, {}",in(reg) hartid) }
+
+    unsafe { asm!("mv tp, {}",in(reg) hartid) }
     task::run_tasks(hartid);
     panic!("Unreachable in rust_main!");
+}
+
+lazy_static::lazy_static!(
+    pub static ref TEMP:UPSafeCell<bool> = unsafe{ UPSafeCell::new(true) };
+);
+
+#[no_mangle]
+pub fn wait_for_irq() {
+    while *TEMP.exclusive_access() {}
+    *TEMP.exclusive_access() = true;
+}
+
+pub unsafe fn handler_ext() {
+    let ptr = k210_pac::PLIC::ptr();
+    let irq = (*ptr).targets[0].claim.read().bits();
+    match irq  {
+        27 => {
+            channel_interrupt_clear(dma_channel::CHANNEL0);
+            *TEMP.exclusive_access() = false;
+        }
+        33 => {
+            
+        }
+        _ => {
+            panic!("unknow irq")
+        }
+    }
+    (*ptr).targets[0].claim.write(|w|w.bits(irq));
 }

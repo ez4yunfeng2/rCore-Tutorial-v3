@@ -37,7 +37,6 @@ impl File for Stdin {
     fn name(&self) -> String {
         String::from("Stdin")
     }
-
 }
 
 impl File for Stdout {

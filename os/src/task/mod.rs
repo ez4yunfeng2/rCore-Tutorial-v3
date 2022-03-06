@@ -6,7 +6,7 @@ mod processor;
 mod switch;
 mod task;
 
-use crate::{fs::{open_file, OpenFlags}};
+use crate::fs::{open_file, OpenFlags};
 use alloc::sync::Arc;
 
 use lazy_static::*;
@@ -18,8 +18,8 @@ pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 pub use manager::add_task;
 pub use processor::{
-    current_process, current_task, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, run_tasks, schedule, take_current_task, current_hartid
+    current_hartid, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
+    current_user_token, run_tasks, schedule, take_current_task,
 };
 pub use task::{TaskControlBlock, TaskStatus};
 
@@ -100,8 +100,6 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     let mut _unused = TaskContext::zero_init();
     schedule(&mut _unused as *mut _);
 }
-
-
 
 lazy_static! {
     pub static ref INITPROC: Arc<ProcessControlBlock> = {

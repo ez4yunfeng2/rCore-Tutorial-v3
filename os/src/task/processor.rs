@@ -32,33 +32,26 @@ impl Processor {
 }
 
 lazy_static! {
-    
     pub static ref PROCESSORS: BTreeMap<usize, UPSafeCell<Processor>> = {
         let mut btree = BTreeMap::new();
         for i in 0..MAX_HARTID {
-            btree.insert(
-                i, 
-                unsafe { 
-                    UPSafeCell::new(Processor::new())
-                }
-            );
+            btree.insert(i, unsafe { UPSafeCell::new(Processor::new()) });
         }
         btree
     };
 }
 
 pub fn current_hartid() -> usize {
-    let mut tp:usize;
+    let mut tp: usize;
     unsafe { asm!("mv {}, tp", out(reg) tp) };
     tp
 }
 
-pub fn run_tasks(hartid : usize) {
+pub fn run_tasks(hartid: usize) {
     loop {
         // println!("hartid {} {}",hartid, current_hartid());
         let mut processor = PROCESSORS.get(&hartid).unwrap().inner.borrow_mut();
         if let Some(task) = fetch_task() {
-
             // println!("[GetTask]: {}",hartid);
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
@@ -81,13 +74,18 @@ pub fn run_tasks(hartid : usize) {
 }
 
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    let mut processor = PROCESSORS.get(&current_hartid()).unwrap().exclusive_access();
+    let mut processor = PROCESSORS
+        .get(&current_hartid())
+        .unwrap()
+        .exclusive_access();
     processor.take_current()
-    
 }
 
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    let processor = PROCESSORS.get(&current_hartid()).unwrap().exclusive_access();
+    let processor = PROCESSORS
+        .get(&current_hartid())
+        .unwrap()
+        .exclusive_access();
     processor.current()
 }
 
@@ -126,7 +124,11 @@ pub fn current_trap_cx_user_va() -> usize {
 // }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    let mut processor = PROCESSORS.get(&current_hartid()).unwrap().inner.borrow_mut();
+    let mut processor = PROCESSORS
+        .get(&current_hartid())
+        .unwrap()
+        .inner
+        .borrow_mut();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(processor);
     unsafe {

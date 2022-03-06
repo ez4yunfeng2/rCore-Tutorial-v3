@@ -3,7 +3,7 @@ use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
-use core::cell::{RefMut, BorrowMutError};
+use core::cell::{BorrowMutError, RefMut};
 
 pub struct TaskControlBlock {
     // immutable
@@ -14,7 +14,9 @@ pub struct TaskControlBlock {
 }
 
 impl TaskControlBlock {
-    pub fn try_inner_exclusive_access(&self) -> Result<RefMut<'_, TaskControlBlockInner>, BorrowMutError> {
+    pub fn try_inner_exclusive_access(
+        &self,
+    ) -> Result<RefMut<'_, TaskControlBlockInner>, BorrowMutError> {
         self.inner.try_exclusive_access()
     }
 

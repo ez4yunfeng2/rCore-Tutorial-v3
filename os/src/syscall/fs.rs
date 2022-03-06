@@ -1,11 +1,11 @@
+use super::process::sys_brk;
+use crate::fs::make_pipe;
 use crate::fs::Dirent;
 use crate::fs::Kstat;
-use crate::fs::make_pipe;
 use crate::fs::OpenFlags;
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_process, current_user_token};
 use alloc::sync::Arc;
-use super::process::sys_brk;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
@@ -48,14 +48,12 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     }
 }
 
-
-
 pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     let token = current_user_token();
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     let path = translated_str(token, path).replace("./", "");
-    println!("[sys_open]: {}",path);
+    println!("[sys_open]: {}", path);
     let dir = if fd >= 0 {
         let fd = fd as usize;
         if let Some(dir) = inner.fd_table.get(&fd).unwrap() {
@@ -72,7 +70,7 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
         dir.create(&path, readable, writable, false)
     } else {
         let directory = flag.contains(OpenFlags::DIRECTORY);
-        dir.open(&path, readable, writable,directory)
+        dir.open(&path, readable, writable, directory)
     };
     if let Some(file) = file {
         let fd = inner.alloc_fd();
@@ -83,14 +81,14 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     }
 }
 
-pub fn sys_unlink(dirfd:isize,path:*const u8,_flags:usize) -> isize{
+pub fn sys_unlink(dirfd: isize, path: *const u8, _flags: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner= process.inner_exclusive_access();
+    let inner = process.inner_exclusive_access();
     if dirfd < 0 {
         let path = translated_str(token, path).replace("./", "");
         if inner.dir_entry.as_ref().unwrap().remove(&path) {
-            return 0
+            return 0;
         }
     }
     1
@@ -110,7 +108,7 @@ pub fn sys_mkdir(dirfd: isize, path: *const u8, _mode: usize) -> isize {
     } else {
         &inner.dir_entry.as_ref().unwrap()
     };
-    
+
     if let Some(file) = dir.create(&path, false, false, true) {
         let fd = inner.alloc_fd();
         inner.fd_table.insert(fd, Some(file));
@@ -120,20 +118,22 @@ pub fn sys_mkdir(dirfd: isize, path: *const u8, _mode: usize) -> isize {
     }
 }
 
-pub fn sys_chdir(path:*const u8) -> isize {
+pub fn sys_chdir(path: *const u8) -> isize {
     let token = current_user_token();
     let process = current_process();
     let mut inner = process.inner_exclusive_access();
     let path = translated_str(token, path).replace("./", "");
-    let inode = inner.dir_entry.as_ref().unwrap().open(&path, true, true, true);
+    let inode = inner
+        .dir_entry
+        .as_ref()
+        .unwrap()
+        .open(&path, true, true, true);
     match inode {
         Some(file) => {
             inner.dir_entry = Some(file);
             0
-        },
-        None => {
-            1
-        },
+        }
+        None => 1,
     }
 }
 
@@ -206,7 +206,7 @@ pub fn sys_getcwd(buf: *const u8, len: usize) -> isize {
     1
 }
 
-pub fn sys_fstat(fd:isize,ptr:*mut Kstat) -> isize {
+pub fn sys_fstat(fd: isize, ptr: *mut Kstat) -> isize {
     let token = current_user_token();
     let stat = translated_refmut(token, ptr);
     let process = current_process();
@@ -220,7 +220,7 @@ pub fn sys_fstat(fd:isize,ptr:*mut Kstat) -> isize {
     1
 }
 
-pub fn sys_getdents(_fd:isize,_kstat:*mut Dirent) -> isize {
+pub fn sys_getdents(_fd: isize, _kstat: *mut Dirent) -> isize {
     1
 }
 
@@ -228,7 +228,14 @@ pub fn _link() -> isize {
     1
 }
 
-pub fn sys_mmap(start:usize,len:usize,_port:usize,_flag:usize,fd:usize,_off:usize) -> isize {
+pub fn sys_mmap(
+    start: usize,
+    len: usize,
+    _port: usize,
+    _flag: usize,
+    fd: usize,
+    _off: usize,
+) -> isize {
     let token = current_user_token();
     let process = current_process();
     let inner = process.inner_exclusive_access();
@@ -239,24 +246,28 @@ pub fn sys_mmap(start:usize,len:usize,_port:usize,_flag:usize,fd:usize,_off:usiz
             } else {
                 start
             };
-            
+
             let end = sys_brk(start_addr + len);
             // file.seek(SeekFrom::Start(0));
-            println!("StartAddr: {:#x} {:#x} {}",start_addr,end,len);
-            file.read(UserBuffer::new(translated_byte_buffer(token, start_addr as *const u8, len)));
+            println!("StartAddr: {:#x} {:#x} {}", start_addr, end, len);
+            file.read(UserBuffer::new(translated_byte_buffer(
+                token,
+                start_addr as *const u8,
+                len,
+            )));
             // for len in UserBuffer::new(translated_byte_buffer(token, start_addr as *const u8, len)) {
             //     unsafe {*len = 0x41}
             // }
             println!("Read OK");
-            return start_addr as isize
+            return start_addr as isize;
         }
     }
     -1
 }
 
-pub fn sys_mount()  -> isize {
+pub fn sys_mount() -> isize {
     0
 }
-pub fn sys_umount()  -> isize {
+pub fn sys_umount() -> isize {
     0
 }

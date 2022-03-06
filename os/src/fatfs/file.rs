@@ -1,7 +1,10 @@
-use crate::{fs::{File, Kstat}, sync::UPSafeCell};
+use crate::{
+    fs::{File, Kstat},
+    sync::UPSafeCell,
+};
 use alloc::{string::String, vec::Vec};
-use k210_pac::wdt0::cr;
 use core::{cmp, ptr::NonNull};
+use k210_pac::wdt0::cr;
 const MAX_FILE_SIZE: u32 = core::u32::MAX;
 use super::{
     alloc_cluster, cluster_to_offset,
@@ -58,14 +61,14 @@ impl FileEntry {
         let offset = self.pos;
         self.entry.set_size(offset as u32);
     }
-    pub fn stat(&self, stat:&mut Kstat) {
+    pub fn stat(&self, stat: &mut Kstat) {
         stat.st_dev = 0;
         stat.sd_ino = 0;
         stat.st_mode = 100000;
         stat.st_nlink = 0;
         stat.st_size = self.size() as isize;
         stat.st_blksize = 512;
-        stat.st_blocks = 0; // 
+        stat.st_blocks = 0; //
         let access = self.entry.data.accessed();
         let create = self.entry.data.created();
         let modify = self.entry.data.modified();
@@ -101,7 +104,8 @@ impl Seek for FileEntry {
             }
         };
         self.disk
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .seek(SeekFrom::Start(disk_offset))
             .unwrap();
         Ok(self.pos)
@@ -232,7 +236,7 @@ impl Inode {
         }
     }
 
-    pub fn open(&mut self, name: &str, isdir:bool) -> Option<Inode> {
+    pub fn open(&mut self, name: &str, isdir: bool) -> Option<Inode> {
         match self {
             Inode::File(_) => None,
             Inode::Dir(dir) => {
@@ -249,7 +253,6 @@ impl Inode {
                         None
                     }
                 }
-                
             }
         }
     }
@@ -299,22 +302,16 @@ impl Inode {
         }
     }
 
-    pub fn remove(&mut self,path:&str) -> bool{
+    pub fn remove(&mut self, path: &str) -> bool {
         match self {
             Inode::File(file) => false,
-            Inode::Dir(dir) => {
-                dir.remove(path).is_ok()
-            }
+            Inode::Dir(dir) => dir.remove(path).is_ok(),
         }
     }
-    pub fn stat(&mut self,stat:&mut Kstat) {
+    pub fn stat(&mut self, stat: &mut Kstat) {
         match self {
-            Inode::File(file) => {
-                file.stat(stat)
-            },
-            Inode::Dir(dir) => {
-                
-            }
+            Inode::File(file) => file.stat(stat),
+            Inode::Dir(dir) => {}
         }
     }
 }

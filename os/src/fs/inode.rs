@@ -71,7 +71,7 @@ pub fn root() -> Arc<OSInode> {
 }
 
 pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
-    println!("Open: {}",path);
+    println!("Open: {}", path);
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
         let file = root_dir().create(path, false).unwrap();
@@ -81,7 +81,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
             Arc::new(unsafe { UPSafeCell::new(file) }),
         )))
     } else {
-        if let Some(file) = root_dir().open(path,false) {
+        if let Some(file) = root_dir().open(path, false) {
             Some(Arc::new(OSInode::new(
                 readable,
                 writable,
@@ -90,7 +90,6 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
         } else {
             None
         }
-        
     }
 }
 
@@ -141,10 +140,10 @@ impl File for OSInode {
         }
     }
 
-    fn open(&self, name: &str, read: bool, write: bool, isdir:bool) -> Option<Arc<OSInode>> {
+    fn open(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
         let inner = self.inner.exclusive_access();
         let mut inner = inner.inode.inner.borrow_mut();
-        if let Some(inode) = inner.open(name,isdir) {
+        if let Some(inode) = inner.open(name, isdir) {
             let os_inode = OSInode::new(read, write, Arc::new(unsafe { UPSafeCell::new(inode) }));
             Some(Arc::new(os_inode))
         } else {
@@ -153,38 +152,52 @@ impl File for OSInode {
     }
     fn name(&self) -> String {
         self.inner
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .inode
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .file_name()
     }
 
     fn seek(&self, offset: SeekFrom) -> usize {
         self.inner
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .inode
-            .inner.borrow_mut()
+            .inner
+            .borrow_mut()
             .seek(offset)
     }
 
-    fn kstat(&self,stat:&mut Kstat) {
-        self.inner.exclusive_access().inode.inner.borrow_mut().stat(stat)
+    fn kstat(&self, stat: &mut Kstat) {
+        self.inner
+            .exclusive_access()
+            .inode
+            .inner
+            .borrow_mut()
+            .stat(stat)
     }
 
-    fn remove(&self, path:&str) -> bool {
-        self.inner.exclusive_access().inode.inner.borrow_mut().remove(path)
+    fn remove(&self, path: &str) -> bool {
+        self.inner
+            .exclusive_access()
+            .inode
+            .inner
+            .borrow_mut()
+            .remove(path)
     }
 }
 
 #[repr(C)]
-pub struct Kstat{
-    pub st_dev:u64,
-    pub sd_ino:u64,
-    pub st_mode:u32,
-    pub st_nlink:u32,
-    pub st_uid:u32,
-    pub st_gid:u32,
-    pub st_rdev:u64,
+pub struct Kstat {
+    pub st_dev: u64,
+    pub sd_ino: u64,
+    pub st_mode: u32,
+    pub st_nlink: u32,
+    pub st_uid: u32,
+    pub st_gid: u32,
+    pub st_rdev: u64,
     pub __pad: u64,
     pub st_size: isize,
     pub st_blksize: u32,
@@ -196,13 +209,13 @@ pub struct Kstat{
     pub st_mtime_nsec: u64,
     pub st_ctime_sec: u64,
     pub st_ctime_nsec: u64,
-    pub __unused: [i32;2]
+    pub __unused: [i32; 2],
 }
 #[repr(C)]
 pub struct Dirent {
-    d_ino:usize,
-    d_off:isize,
+    d_ino: usize,
+    d_off: isize,
     d_reclen: u16,
     d_type: u8,
-    name: *const u8
+    name: *const u8,
 }
