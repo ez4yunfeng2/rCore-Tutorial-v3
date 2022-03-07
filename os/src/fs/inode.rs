@@ -100,12 +100,35 @@ impl File for OSInode {
     fn writable(&self) -> bool {
         self.writable
     }
+    
+    fn open(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
+        let inner = self.inner.exclusive_access();
+        let mut inner = inner.inode.exclusive_access();
+        if let Some(inode) = inner.open(name, isdir) {
+            let os_inode = OSInode::new(read, write, Arc::new(unsafe { UPSafeCell::new(inode) }));
+            Some(Arc::new(os_inode))
+        } else {
+            None
+        }
+    }
+
+        
+    fn seek(&self, offset: SeekFrom) -> usize {
+        let mut inner = self.inner.exclusive_access();
+        let offset = inner.inode
+            .exclusive_access()
+            .seek(offset);
+        inner.offset = offset;
+        offset
+    }
+
+
     fn read(&self, mut buf: UserBuffer) -> usize {
         let mut inner = self.inner.exclusive_access();
         let mut total_read_size = 0usize;
         for slice in buf.buffers.iter_mut() {
             let offset = inner.offset;
-            let len = inner.inode.inner.borrow_mut().read(offset, *slice);
+            let len = inner.inode.exclusive_access().read(offset, *slice);
             if len == 0 {
                 break;
             }
@@ -140,36 +163,6 @@ impl File for OSInode {
         }
     }
 
-    fn open(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
-        let inner = self.inner.exclusive_access();
-        let mut inner = inner.inode.inner.borrow_mut();
-        if let Some(inode) = inner.open(name, isdir) {
-            let os_inode = OSInode::new(read, write, Arc::new(unsafe { UPSafeCell::new(inode) }));
-            Some(Arc::new(os_inode))
-        } else {
-            None
-        }
-    }
-    fn name(&self) -> String {
-        self.inner
-            .inner
-            .borrow_mut()
-            .inode
-            .inner
-            .borrow_mut()
-            .file_name()
-    }
-
-    fn seek(&self, offset: SeekFrom) -> usize {
-        self.inner
-            .inner
-            .borrow_mut()
-            .inode
-            .inner
-            .borrow_mut()
-            .seek(offset)
-    }
-
     fn kstat(&self, stat: &mut Kstat) {
         self.inner
             .exclusive_access()
@@ -186,6 +179,16 @@ impl File for OSInode {
             .inner
             .borrow_mut()
             .remove(path)
+    }
+
+    fn name(&self) -> String {
+        self.inner
+            .inner
+            .borrow_mut()
+            .inode
+            .inner
+            .borrow_mut()
+            .file_name()
     }
 }
 

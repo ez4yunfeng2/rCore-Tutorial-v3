@@ -1,4 +1,5 @@
 use super::process::sys_brk;
+use crate::fatfs::io::SeekFrom;
 use crate::fs::make_pipe;
 use crate::fs::Dirent;
 use crate::fs::Kstat;
@@ -19,7 +20,6 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
             return -1;
         }
         let file = file.clone();
-        // release current task TCB manually to avoid multi-borrow
         drop(inner);
         file.write(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
     } else {
@@ -234,7 +234,7 @@ pub fn sys_mmap(
     _port: usize,
     _flag: usize,
     fd: usize,
-    _off: usize,
+    off: usize,
 ) -> isize {
     let token = current_user_token();
     let process = current_process();
@@ -246,23 +246,22 @@ pub fn sys_mmap(
             } else {
                 start
             };
-
-            let end = sys_brk(start_addr + len);
-            // file.seek(SeekFrom::Start(0));
-            println!("StartAddr: {:#x} {:#x} {}", start_addr, end, len);
+            sys_brk(start_addr + len);
+            file.seek(SeekFrom::Start(off as u64));
             file.read(UserBuffer::new(translated_byte_buffer(
                 token,
                 start_addr as *const u8,
                 len,
             )));
-            // for len in UserBuffer::new(translated_byte_buffer(token, start_addr as *const u8, len)) {
-            //     unsafe {*len = 0x41}
-            // }
-            println!("Read OK");
             return start_addr as isize;
         }
     }
     -1
+}
+
+pub fn sys_munmap(start:usize,_len:usize) -> isize {
+    sys_brk(start);
+    0
 }
 
 pub fn sys_mount() -> isize {

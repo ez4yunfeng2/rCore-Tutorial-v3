@@ -24,7 +24,6 @@ pub use processor::{
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub fn suspend_current_and_run_next() {
-    // println!("suspend_current_and_run_next");
     // There must be an application running.
     let task = take_current_task().unwrap();
 

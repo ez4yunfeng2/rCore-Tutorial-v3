@@ -91,6 +91,7 @@ impl Seek for FileEntry {
             SeekFrom::Start(x) => {
                 let offset = self.range.0 + x;
                 self.pos = x as u64;
+                println!("Seek Strat: {}", offset);
                 offset
             }
             SeekFrom::End(x) => {

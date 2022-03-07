@@ -77,9 +77,6 @@ pub fn trap_handler() -> ! {
             exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // let mut a:usize;
-            // unsafe{ asm!("mv {}, tp",out(reg) a) };
-            // println!("SupervisorTimer {}",a);
             set_next_trigger();
             check_timer();
             suspend_current_and_run_next();

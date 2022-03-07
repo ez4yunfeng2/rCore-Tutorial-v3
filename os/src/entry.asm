@@ -1,6 +1,7 @@
     .section .text.entry
     .globl _start
 _start:
+    mv tp, a0
     la sp, boot_stack
     li t0, 4096 * 16
     addi t1, a0, 1

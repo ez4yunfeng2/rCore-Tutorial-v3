@@ -7,7 +7,7 @@ fn panic(info: &PanicInfo) -> ! {
     match info.location() {
         Some(location) => {
             println!(
-                "[kernel] hartid {} panicked at '{}', {}:{}:{}",
+                "[LotusOS] hartid {} panicked at '{}', {}:{}:{}",
                 current_hartid(),
                 info.message().unwrap(),
                 location.file(),
