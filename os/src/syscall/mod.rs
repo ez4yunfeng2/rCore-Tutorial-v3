@@ -65,7 +65,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_OPEN => sys_open(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_PIPE => sys_pipe(args[0] as *mut i32),
-        SYSCALL_GETDENTS => sys_getdents(args[0] as isize, args[1] as *mut Dirent),
+        SYSCALL_GETDENTS => sys_getdents(args[0] as isize, args[1] as *mut Dirent, args[2]),
         SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_FSTAT => sys_fstat(args[0] as isize, args[1] as *mut Kstat),

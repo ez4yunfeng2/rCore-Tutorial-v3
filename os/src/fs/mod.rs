@@ -1,3 +1,4 @@
+#![allow(unused)]
 mod inode;
 mod pipe;
 mod stdio;
@@ -10,26 +11,25 @@ pub trait File: Send + Sync {
     fn seek(&self, _offset: SeekFrom) -> usize {
         0
     }
-    fn read(&self, _buf: UserBuffer) -> usize {
+    fn read(&self, buf: UserBuffer) -> usize {
         0
     }
-    fn write(&self, _buf: UserBuffer) -> usize {
-        0
-    }
-    fn create(&self, _name: &str, _read: bool, _write: bool, _isdir: bool) -> Option<Arc<OSInode>> {
+    fn write(&self, buf: UserBuffer) -> usize {0}
+    fn create(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
         None
     }
-    fn open(&self, _name: &str, _read: bool, _write: bool, _isdir: bool) -> Option<Arc<OSInode>> {
+    fn open(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
         None
     }
-    fn remove(&self, _path: &str) -> bool {
+    fn remove(&self, path: &str) -> bool {
         false
     }
     fn islink(&self) -> bool {
         false
     }
-    fn kstat(&self, _stat: &mut Kstat) {}
+    fn kstat(&self, stat: &mut Kstat) {}
     fn name(&self) -> String;
+    fn getdents(&self, dirent:&mut Dirent) -> isize {-1}
 }
 
 use alloc::{string::String, sync::Arc};

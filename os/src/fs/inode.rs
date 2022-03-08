@@ -154,7 +154,7 @@ impl File for OSInode {
     }
     fn create(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
         let inner = self.inner.exclusive_access();
-        let mut inner = inner.inode.inner.borrow_mut();
+        let mut inner = inner.inode.exclusive_access();
         if let Some(inode) = inner.create(name, isdir) {
             let os_inode = OSInode::new(read, write, Arc::new(unsafe { UPSafeCell::new(inode) }));
             Some(Arc::new(os_inode))
@@ -190,6 +190,9 @@ impl File for OSInode {
             .borrow_mut()
             .file_name()
     }
+    fn getdents(&self, dirent:&mut Dirent) -> isize {
+        self.inner.exclusive_access().inode.exclusive_access().getdents(dirent)
+    }
 }
 
 #[repr(C)]
@@ -216,9 +219,8 @@ pub struct Kstat {
 }
 #[repr(C)]
 pub struct Dirent {
-    d_ino: usize,
-    d_off: isize,
-    d_reclen: u16,
-    d_type: u8,
-    name: *const u8,
+    pub d_ino: usize,
+    pub d_off: isize,
+    pub d_reclen: u16,
+    pub d_type: u8,
 }

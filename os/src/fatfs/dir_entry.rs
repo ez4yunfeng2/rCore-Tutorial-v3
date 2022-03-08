@@ -19,7 +19,7 @@ use super::{
 };
 use crate::{
     fatfs::lfn::{LongNameBuilder, ShortName, LFN_PART_LEN},
-    sync::UPSafeCell,
+    sync::UPSafeCell, fs::Dirent,
 };
 
 bitflags! {
@@ -347,12 +347,13 @@ impl DirEntryData {
 
 pub struct DirEntry {
     pub dir_entry: DirFileEntry,
-    pub offset: u64,
+    pub offset: u64, // abs offset
     pub disk: UPSafeCell<BlkCacheManager>,
     pub short_name: ShortName,
     pub lfn_utf16: LfnBuffer,
     pub offset_range: (u64, u64),
     pub entry_pos: u64,
+    pub dirents: u64
 }
 
 impl DirEntry {
@@ -374,6 +375,7 @@ impl DirEntry {
             lfn_utf16: LfnBuffer::new(),
             entry_pos: 0,
             offset_range: (0, 0),
+            dirents: 0
         }
     }
     pub fn new(first_cluster: u32) -> Self {
@@ -389,6 +391,7 @@ impl DirEntry {
             lfn_utf16: LfnBuffer::new(),
             entry_pos: 0,
             offset_range: (0, 0),
+            dirents: 0
         }
     }
     pub fn long_file_name_as_ucs2_units(&self) -> Option<&[u16]> {
@@ -407,7 +410,7 @@ impl DirEntry {
         }
     }
     pub fn find_entry(&mut self, name: &str, is_dir: Option<bool>) -> Result<DirEntry, Error<()>> {
-        self.seek(SeekFrom::Current(0)).unwrap();
+        self.seek(SeekFrom::Start(0)).unwrap();
         for e in self {
             if e.eq_name(name) {
                 if is_dir.is_some() && Some(e.is_dir()) != is_dir {
@@ -545,6 +548,7 @@ impl DirEntry {
             offset,
             disk,
             offset_range,
+            dirents: 0
         })
     }
 
@@ -580,6 +584,7 @@ impl DirEntry {
         match r {
             DirEntryOrShortName::DirEntry(e) => Ok(Inode::Dir(e)),
             DirEntryOrShortName::ShortName(short_name) => {
+                println!("write dir");
                 let cluster = alloc_cluster(None, true).unwrap();
                 let sfn_entry =
                     self.create_sfn_entry(short_name, DirAttr::DIRECTORY, Some(cluster));
@@ -591,6 +596,7 @@ impl DirEntry {
                     entry.dir_entry.first_cluster(),
                 );
                 entry.write_entry(".", sfn_entry)?;
+
                 let dotdot_sfn = ShortNameGenerator::generate_dotdot();
                 let sfn_entry = self.create_sfn_entry(
                     dotdot_sfn,
@@ -681,6 +687,7 @@ impl DirEntry {
                             entry_pos,
                             lfn_utf16: lfn_builder.into_buf(),
                             offset_range: (begin_offset, offset),
+                            dirents: 0
                         })
                     });
                 }
@@ -711,6 +718,25 @@ impl DirEntry {
             Some(rest) => e.open_dir(rest),
             None => Ok(Inode::Dir(e)),
         }
+    }
+
+    pub fn getdents(&mut self) -> Result<Inode, Error<()>> {
+        let offset = self.offset;
+        self.seek(SeekFrom::Start(self.dirents));
+        match self.read_next_entry() {
+            Ok(Some(e)) => {
+                self.dirents = self.offset - offset;
+                match e.is_dir() {
+                    true => Ok(Inode::Dir(e)),
+                    false => Ok(Inode::File(e.to_file())),
+                }
+            },
+            Ok(None) => {
+                Err(Error::NotFound)
+            }
+            Err(e) => Err(e),
+        }
+
     }
 
     pub fn to_file(&self) -> FileEntry {

@@ -1,15 +1,15 @@
 use crate::{
-    fs::{File, Kstat},
+    fs::{File, Kstat, Dirent},
     sync::UPSafeCell,
 };
 use alloc::{string::String, vec::Vec};
 use core::{cmp, ptr::NonNull};
-use k210_pac::wdt0::cr;
+use k210_pac::{wdt0::cr, aes::en};
 const MAX_FILE_SIZE: u32 = core::u32::MAX;
 use super::{
     alloc_cluster, cluster_to_offset,
     dir_entry::{DirEntry, DirEntryEditor, DirFileEntry},
-    io::{IoBase, Read, Seek, SeekFrom, Write},
+    io::{IoBase, Read, Seek, SeekFrom, Write, Error},
     sdcard::BlkCacheManager,
     FATFS,
 };
@@ -32,12 +32,14 @@ impl FileEntry {
             Some(x) => cluster_to_offset(x),
             None => 0,
         };
-        let mut disk = BlkCacheManager::new();
-        disk.seek(SeekFrom::Start(abs_start_pos)).unwrap();
-        let disk = unsafe { UPSafeCell::new(disk) };
+
         let range = (abs_start_pos, abs_start_pos + entry.size());
         let first_cluster = None;
         let current_cluster = None;
+        
+        let mut disk = BlkCacheManager::from(abs_start_pos as usize,entry.size()as usize);
+        disk.seek(SeekFrom::Start(abs_start_pos)).unwrap();
+        let disk = unsafe { UPSafeCell::new(disk) };
         let entry = DirEntryEditor::new(entry, entry_pos);
         Self {
             pos,
@@ -185,7 +187,7 @@ impl Write for FileEntry {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        todo!()
+        self.disk.exclusive_access().flush()
     }
 }
 
@@ -217,45 +219,38 @@ impl Inode {
 
     pub fn create(&mut self, name: &str, isdir: bool) -> Option<Inode> {
         match self {
-            Inode::File(_) => None,
+            Inode::File(_) => {},
             Inode::Dir(dir) => match isdir {
                 true => {
                     if let Ok(file) = dir.create_dir(name) {
-                        Some(file)
-                    } else {
-                        None
+                        return Some(file)
                     }
                 }
                 false => {
                     if let Ok(file) = dir.create_file(name) {
-                        Some(file)
-                    } else {
-                        None
+                        return Some(file)
                     }
                 }
             },
         }
+        None
     }
 
     pub fn open(&mut self, name: &str, isdir: bool) -> Option<Inode> {
         match self {
-            Inode::File(_) => None,
+            Inode::File(_) => {},
             Inode::Dir(dir) => {
-                if isdir {
-                    if let Ok(dir) = dir.open_dir(name) {
-                        Some(dir)
-                    } else {
-                        None
+                match isdir {
+                    true => if let Ok(dir) = dir.open_dir(name) {
+                        return Some(dir)
                     }
-                } else {
-                    if let Ok(file) = dir.open_file(name) {
-                        Some(file)
-                    } else {
-                        None
-                    }
+                    false => if let Ok(file) = dir.open_file(name) {
+                        return Some(file)
+                    } 
                 }
             }
         }
+        None
     }
 
     pub fn read(&mut self, offset: usize, buf: &mut [u8]) -> usize {
@@ -314,5 +309,35 @@ impl Inode {
             Inode::File(file) => file.stat(stat),
             Inode::Dir(dir) => {}
         }
+    }
+    pub fn getdents(&mut self, dirent: &mut Dirent) -> isize {
+        match self {
+            Inode::File(_) => -1,
+            Inode::Dir(dir) => {
+                let current = dir.dirents;
+                match dir.getdents() {
+                    Ok(e) => {
+                        dirent.d_ino = current as usize;
+                        dirent.d_off = 0;
+                        dirent.d_reclen = (dir.dirents - current) as u16;
+                        1
+                    },
+                    Err(Error::NotFound) => {
+                        0
+                    }
+                    Err(e) => -1,
+                }
+            },
+        }
+    }
+}
+
+impl Drop for Inode {
+    fn drop(&mut self) {
+        match self {
+            Inode::File(file) => file.flush().unwrap(),
+            Inode::Dir(_) => {},
+        }
+        drop(self)
     }
 }

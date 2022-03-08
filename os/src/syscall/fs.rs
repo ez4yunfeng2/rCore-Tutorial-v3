@@ -6,6 +6,7 @@ use crate::fs::Kstat;
 use crate::fs::OpenFlags;
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_process, current_user_token};
+use alloc::string::ToString;
 use alloc::sync::Arc;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
@@ -64,6 +65,13 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     } else {
         &inner.dir_entry.as_ref().unwrap()
     };
+    if path == ".".to_string() {
+        let tmp = dir.clone();
+        drop(dir);
+        let fd = inner.alloc_fd();
+        inner.fd_table.insert(fd, Some(tmp));
+        return fd as isize
+    }
     let flag = OpenFlags::from_bits(flags).unwrap();
     let (readable, writable) = flag.read_write();
     let file = if flag.contains(OpenFlags::CREATE) {
@@ -220,8 +228,21 @@ pub fn sys_fstat(fd: isize, ptr: *mut Kstat) -> isize {
     1
 }
 
-pub fn sys_getdents(_fd: isize, _kstat: *mut Dirent) -> isize {
-    1
+pub fn sys_getdents(fd: isize, ptr: *mut Dirent,_len: usize) -> isize {
+    let token = current_user_token();
+    let process = current_process();
+    let inner = process.inner_exclusive_access();
+    let dirent= translated_refmut(token, ptr);
+    let mut name = translated_str(token, (ptr as usize + 19) as *const u8);
+    match inner.fd_table.get(&(fd as usize)) {
+        Some(Some(file)) => {
+            file.getdents(dirent);
+            name.clone_from(&file.name());
+            1
+        },
+        Some(None) => -1,
+        None => -1,
+    }
 }
 
 pub fn _link() -> isize {

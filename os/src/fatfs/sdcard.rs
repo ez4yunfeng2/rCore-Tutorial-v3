@@ -4,6 +4,7 @@ use crate::drivers::BLOCK_DEVICE;
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::{collections::VecDeque, sync::Arc};
+use k210_pac::gpiohs::fall_ie;
 use core::cmp::{self, min};
 use core::convert::TryFrom;
 use k210_pac::dmac::id;
@@ -16,21 +17,8 @@ lazy_static::lazy_static!(
 pub struct BlockCache {
     pub pos: usize,
     pub block_id: usize,
+    pub dirty: bool,
     pub cache: [u8; 512],
-}
-
-impl BlockCache {
-    fn new(p: usize, block_drv: Arc<dyn BlockDevice>) -> Self {
-        let mut cache = [0; 512];
-        let block_id = p / 512;
-        let pos = p % 512;
-        block_drv.read_block(block_id, &mut cache);
-        Self {
-            pos,
-            block_id,
-            cache,
-        }
-    }
 }
 
 unsafe impl Sync for BlockCache {}
@@ -79,6 +67,8 @@ impl Seek for BlockCache {
 
 pub struct BlkCacheManager {
     pub pos: usize,
+    pub start: usize,
+    pub size: usize,
     pub block_driver: Arc<dyn BlockDevice>,
 }
 
@@ -86,6 +76,16 @@ impl BlkCacheManager {
     pub fn new() -> Self {
         BlkCacheManager {
             pos: 0,
+            size: 0,
+            start: 0,
+            block_driver: BLOCK_DEVICE.clone(),
+        }
+    }
+    pub fn from(start:usize, size: usize) -> Self {
+        BlkCacheManager {
+            pos: 0,
+            size,
+            start,
             block_driver: BLOCK_DEVICE.clone(),
         }
     }
@@ -143,6 +143,11 @@ impl Write for BlkCacheManager {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
+        let start = self.start / 512;
+        let end = (self.start + self.size) / 512;
+        for blk in start..end {
+            BLK_MANAGER.exclusive_access().sync_block(blk);
+        }
         Ok(())
     }
 }
@@ -178,6 +183,7 @@ impl BlkManager {
             pos: 0,
             block_id: blk_id,
             cache: buf,
+            dirty: false
         };
         self.blocks.insert(blk_id, blk);
     }
@@ -185,6 +191,14 @@ impl BlkManager {
         let mut blk = self.blocks.get_mut(&blk_id).unwrap();
         self.driver.write_block(blk_id, &mut blk.cache);
     }
+
+    pub fn sync_block(&mut self,blk: usize) {
+        match self.blocks.remove(&blk) {
+            Some(_) => {},
+            None => {},
+        }
+    }
+
     pub fn read_block(
         &mut self,
         blk_id: usize,
