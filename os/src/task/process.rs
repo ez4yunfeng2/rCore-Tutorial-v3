@@ -1,22 +1,23 @@
+use core::cell::{RefMut, BorrowError, BorrowMutError};
+
 use super::add_task;
 use super::id::RecycleAllocator;
 use super::TaskControlBlock;
 use super::{pid_alloc, PidHandle};
 use crate::fs::{root, File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
-use crate::sync::{Mutex, Semaphore};
+use crate::sync::{Mutex, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use spin::MutexGuard;
 
 pub struct ProcessControlBlock {
     // immutable
     pub pid: PidHandle,
     // mutable
-    pub inner: spin::mutex::Mutex<ProcessControlBlockInner>,
+    pub inner: UPSafeCell<ProcessControlBlockInner>,
 }
 
 pub struct ProcessControlBlockInner {
@@ -67,12 +68,12 @@ impl ProcessControlBlockInner {
 }
 
 impl ProcessControlBlock {
-    pub fn try_inner_exclusive_access(&self) -> Option<MutexGuard<ProcessControlBlockInner>> {
-        self.inner.try_lock()
+    pub fn try_inner_exclusive_access(&self) -> Result<RefMut<ProcessControlBlockInner>, BorrowMutError> {
+        self.inner.try_exclusive_access()
     }
 
-    pub fn inner_exclusive_access(&self) -> MutexGuard<ProcessControlBlockInner> {
-        self.inner.lock()
+    pub fn inner_exclusive_access(&self) -> RefMut<ProcessControlBlockInner> {
+        self.inner.exclusive_access()
     }
 
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
@@ -86,8 +87,8 @@ impl ProcessControlBlock {
         btree.insert(2, Some(Arc::new(Stdout)));
         let process = Arc::new(Self {
             pid: pid_handle,
-            inner: //unsafe {
-                spin::mutex::Mutex::new(ProcessControlBlockInner {
+            inner: unsafe {
+                UPSafeCell::new(ProcessControlBlockInner {
                     is_zombie: false,
                     memory_set,
                     parent: None,
@@ -100,7 +101,7 @@ impl ProcessControlBlock {
                     semaphore_list: Vec::new(),
                     dir_entry: Some(root()),
                 })
-            /*  } */,
+              } ,
         });
         // create a main thread, we should allocate ustack and trap_cx here
         let task = Arc::new(TaskControlBlock::new(
@@ -204,7 +205,7 @@ impl ProcessControlBlock {
         // create child process pcb
         let child = Arc::new(Self {
             pid,
-            inner: spin::mutex::Mutex::new(ProcessControlBlockInner {
+            inner: unsafe{ UPSafeCell::new(ProcessControlBlockInner {
                 is_zombie: false,
                 memory_set,
                 parent: Some(Arc::downgrade(self)),
@@ -216,7 +217,7 @@ impl ProcessControlBlock {
                 mutex_list: Vec::new(),
                 semaphore_list: Vec::new(),
                 dir_entry: parent.dir_entry.clone(),
-            }),
+            }) },
         });
         // add child
         parent.children.push(Arc::clone(&child));

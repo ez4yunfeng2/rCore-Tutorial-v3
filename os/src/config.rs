@@ -1,3 +1,5 @@
+use riscv::register::{vscause::{set_interrupt, clear_interrupt}, sstatus};
+
 #[allow(unused)]
 pub const MAX_HARTID: usize = 2;
 pub const USER_STACK_SIZE: usize = 4096 * 2;
@@ -49,3 +51,15 @@ pub const MMIO: &[(usize, usize)] = &[
     (0x0250_0000, 0x1000), /* UART 0-3 */
     (0x0402_0000, 0x3000), /* SMHC 0-3 */
 ];
+#[inline]
+pub fn intr_on() {
+    unsafe {
+        sstatus::set_sie();
+    }
+}
+#[inline]
+pub fn intr_off() {
+    unsafe {
+        sstatus::clear_sie();
+    }
+}

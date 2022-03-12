@@ -100,7 +100,7 @@ impl File for OSInode {
     fn writable(&self) -> bool {
         self.writable
     }
-    
+
     fn open(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
         let inner = self.inner.exclusive_access();
         let mut inner = inner.inode.exclusive_access();
@@ -112,16 +112,12 @@ impl File for OSInode {
         }
     }
 
-        
     fn seek(&self, offset: SeekFrom) -> usize {
         let mut inner = self.inner.exclusive_access();
-        let offset = inner.inode
-            .exclusive_access()
-            .seek(offset);
+        let offset = inner.inode.exclusive_access().seek(offset);
         inner.offset = offset;
         offset
     }
-
 
     fn read(&self, mut buf: UserBuffer) -> usize {
         let mut inner = self.inner.exclusive_access();
@@ -190,8 +186,12 @@ impl File for OSInode {
             .borrow_mut()
             .file_name()
     }
-    fn getdents(&self, dirent:&mut Dirent) -> isize {
-        self.inner.exclusive_access().inode.exclusive_access().getdents(dirent)
+    fn getdents(&self, dirent: &mut Dirent) -> isize {
+        self.inner
+            .exclusive_access()
+            .inode
+            .exclusive_access()
+            .getdents(dirent)
     }
 }
 

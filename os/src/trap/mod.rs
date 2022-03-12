@@ -1,6 +1,9 @@
 mod context;
-
-use crate::config::TRAMPOLINE;
+pub use context::TrapContext;
+use riscv::register::sstatus::{self, SPP};
+use crate::config::{TRAMPOLINE, intr_off};
+use crate::irq::handler_ext;
+use crate::sbi::sbi_smext_stimer;
 use crate::syscall::syscall;
 use crate::task::{
     current_trap_cx, current_trap_cx_user_va, current_user_token, exit_current_and_run_next,
@@ -21,7 +24,10 @@ pub fn init() {
 
 fn set_kernel_trap_entry() {
     unsafe {
-        stvec::write(trap_from_kernel as usize, TrapMode::Direct);
+        extern  "C" {
+            fn __from_kernel_save();
+        }
+        stvec::write(__from_kernel_save as usize, TrapMode::Direct);
     }
 }
 
@@ -39,6 +45,7 @@ pub fn enable_timer_interrupt() {
 
 #[no_mangle]
 pub fn trap_handler() -> ! {
+    assert_eq!(sstatus::read().spp(), SPP::User);
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
@@ -81,6 +88,12 @@ pub fn trap_handler() -> ! {
             check_timer();
             suspend_current_and_run_next();
         }
+        Trap::Interrupt(Interrupt::SupervisorSoft) => {
+            // irq_handler();
+            println!("Fuck!!!!!!!");
+            handler_ext();
+            sbi_smext_stimer();
+        }
         _ => {
             panic!(
                 "Unsupported trap {:?}, stval = {:#x}!",
@@ -89,12 +102,12 @@ pub fn trap_handler() -> ! {
             );
         }
     }
-    //println!("before trap_return");
     trap_return();
 }
 
 #[no_mangle]
 pub fn trap_return() -> ! {
+    intr_off();
     set_user_trap_entry();
     let trap_cx_user_va = current_trap_cx_user_va();
     let user_satp = current_user_token();
@@ -116,10 +129,16 @@ pub fn trap_return() -> ! {
 }
 
 #[no_mangle]
-pub fn trap_from_kernel() -> ! {
-    use riscv::register::sepc;
-    println!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
-    panic!("a trap {:?} from kernel!", scause::read().cause());
+pub fn trap_from_kernel(){
+    assert_eq!(sstatus::read().spp(), SPP::Supervisor);
+    let scause = scause::read();
+    match scause.cause() {
+        Trap::Interrupt(Interrupt::SupervisorSoft) => {
+            println!("Demo!!!!!!!");
+            handler_ext();
+            sbi_smext_stimer();
+        },
+        Trap::Interrupt(_) => todo!(),
+        Trap::Exception(_) => todo!(),
+    }
 }
-
-pub use context::TrapContext;

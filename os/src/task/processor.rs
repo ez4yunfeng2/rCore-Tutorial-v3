@@ -1,12 +1,14 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{ProcessControlBlock, TaskContext, TaskControlBlock};
-use crate::config::MAX_HARTID;
+use crate::config::{MAX_HARTID, intr_on};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use k210_soc::sleep::usleep;
 use lazy_static::*;
+use riscv::register::sstatus;
 
 pub struct Processor {
     current: Option<Arc<TaskControlBlock>>,
@@ -49,10 +51,9 @@ pub fn current_hartid() -> usize {
 
 pub fn run_tasks(hartid: usize) {
     loop {
-        // println!("hartid {} {}",hartid, current_hartid());
         let mut processor = PROCESSORS.get(&hartid).unwrap().inner.borrow_mut();
+        intr_on();
         if let Some(task) = fetch_task() {
-            // println!("[GetTask]: {}",hartid);
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
@@ -63,7 +64,6 @@ pub fn run_tasks(hartid: usize) {
             processor.current = Some(task);
             // release processor manually
             drop(processor);
-            // println!("]  hartid: {} {:#x} {:#x}",hartid,idle_task_cx_ptr as usize,next_task_cx_ptr as usize);
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
@@ -124,6 +124,7 @@ pub fn current_trap_cx_user_va() -> usize {
 // }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
+    // assert_eq!(sstatus::read().sie(),false);
     let mut processor = PROCESSORS
         .get(&current_hartid())
         .unwrap()

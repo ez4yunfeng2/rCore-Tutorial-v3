@@ -1,6 +1,7 @@
 use crate::sync::UPSafeCell;
 use crate::task::{add_task, block_current_and_run_next, current_task, TaskControlBlock};
 use alloc::{collections::VecDeque, sync::Arc};
+use riscv::register::sstatus;
 
 pub struct Semaphore {
     pub inner: UPSafeCell<SemaphoreInner>,
@@ -39,7 +40,7 @@ impl Semaphore {
         if inner.count < 0 {
             inner.wait_queue.push_back(current_task().unwrap());
             drop(inner);
-            block_current_and_run_next();
+            //block_current_and_run_next();
         }
     }
 }

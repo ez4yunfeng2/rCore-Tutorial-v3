@@ -4,10 +4,10 @@ use crate::drivers::BLOCK_DEVICE;
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::{collections::VecDeque, sync::Arc};
-use k210_pac::gpiohs::fall_ie;
 use core::cmp::{self, min};
 use core::convert::TryFrom;
 use k210_pac::dmac::id;
+use k210_pac::gpiohs::fall_ie;
 
 lazy_static::lazy_static!(
     pub static ref BLK_MANAGER: Arc<UPSafeCell<BlkManager>> = Arc::new(unsafe{ UPSafeCell::new(BlkManager::new()) });
@@ -81,7 +81,7 @@ impl BlkCacheManager {
             block_driver: BLOCK_DEVICE.clone(),
         }
     }
-    pub fn from(start:usize, size: usize) -> Self {
+    pub fn from(start: usize, size: usize) -> Self {
         BlkCacheManager {
             pos: 0,
             size,
@@ -183,7 +183,7 @@ impl BlkManager {
             pos: 0,
             block_id: blk_id,
             cache: buf,
-            dirty: false
+            dirty: false,
         };
         self.blocks.insert(blk_id, blk);
     }
@@ -192,10 +192,10 @@ impl BlkManager {
         self.driver.write_block(blk_id, &mut blk.cache);
     }
 
-    pub fn sync_block(&mut self,blk: usize) {
+    pub fn sync_block(&mut self, blk: usize) {
         match self.blocks.remove(&blk) {
-            Some(_) => {},
-            None => {},
+            Some(_) => {}
+            None => {}
         }
     }
 

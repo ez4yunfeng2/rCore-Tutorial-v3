@@ -1,11 +1,11 @@
 #![allow(unused)]
 pub mod boot_sector;
+pub mod dir;
 pub mod dir_entry;
 pub mod file;
 pub mod fs;
 pub mod io;
 pub mod lfn;
-pub mod dir;
 pub mod sdcard;
 pub mod table;
 pub mod time;

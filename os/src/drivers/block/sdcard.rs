@@ -3,12 +3,12 @@
 #![allow(unused)]
 
 use super::BlockDevice;
-use crate::sync::UPSafeCell;
+use crate::sync::{UPSafeCell, Semaphore};
 use core::convert::TryInto;
 use k210_hal::{cache::Uncache, prelude::*};
 use k210_pac::{Peripherals, SPI0};
 use k210_soc::{
-    dmac::{DMACExt, DMAC},
+    dmac::{DMACExt, DMAC, channel_interrupt_clear},
     fpioa::{self, io},
     gpio, gpiohs,
     sleep::usleep,
@@ -16,7 +16,7 @@ use k210_soc::{
     sysctl::{self, dma_channel},
 };
 use lazy_static::*;
-use log::error;
+use log::{error, info};
 
 static mut DMA_CHUNK: [u32; 512] = [0; 512];
 
@@ -833,34 +833,43 @@ fn init_sdcard() -> SDCard<SPIImpl<SPI0>> {
     sd
 }
 
-pub struct SDCardWrapper(UPSafeCell<SDCard<SPIImpl<SPI0>>>);
+pub struct SDCardWrapper {
+    irq: UPSafeCell<bool>,
+    driver: UPSafeCell<SDCard<SPIImpl<SPI0>>>
+}
 
 impl SDCardWrapper {
     pub fn new() -> Self {
-        unsafe { Self(UPSafeCell::new(init_sdcard())) }
+        unsafe {
+            Self{
+                irq:  UPSafeCell::new(false),
+                driver: UPSafeCell::new(init_sdcard())
+            }
+        }
     }
 }
 
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        // println!("[read] {} {:#x}", block_id, buf.as_ptr() as usize);
-        self.0
-            .try_exclusive_access()
-            .unwrap()
-            .read_sector_dma(buf, block_id as u32)
-            .unwrap();
-        // self.0.try_exclusive_access().unwrap().read_sector(buf,block_id as u32).unwrap();
+        match *self.irq.exclusive_access() {
+            true => {
+                self.driver.exclusive_access().read_sector_dma(buf, block_id as u32).unwrap()
+            },
+            false => {
+                self.driver.exclusive_access().read_sector(buf, block_id as u32).unwrap()
+            },
+        }
     }
 
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        self.0
-            .try_exclusive_access()
-            .unwrap()
-            .write_sector(buf, block_id as u32)
-            .unwrap();
+        self.driver.exclusive_access().write_sector(buf, block_id as u32).unwrap()
+    }
+
+    fn change_mode(&self) {
+        *self.irq.exclusive_access() = true;
     }
 
     fn handler_interrupt(&self) {
-        todo!()
+        channel_interrupt_clear(dma_channel::CHANNEL0)
     }
 }

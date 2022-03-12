@@ -14,7 +14,9 @@ pub trait File: Send + Sync {
     fn read(&self, buf: UserBuffer) -> usize {
         0
     }
-    fn write(&self, buf: UserBuffer) -> usize {0}
+    fn write(&self, buf: UserBuffer) -> usize {
+        0
+    }
     fn create(&self, name: &str, read: bool, write: bool, isdir: bool) -> Option<Arc<OSInode>> {
         None
     }
@@ -29,7 +31,9 @@ pub trait File: Send + Sync {
     }
     fn kstat(&self, stat: &mut Kstat) {}
     fn name(&self) -> String;
-    fn getdents(&self, dirent:&mut Dirent) -> isize {-1}
+    fn getdents(&self, dirent: &mut Dirent) -> isize {
+        -1
+    }
 }
 
 use alloc::{string::String, sync::Arc};

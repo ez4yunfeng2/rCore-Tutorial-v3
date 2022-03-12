@@ -8,7 +8,6 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-spin = "0.9"
 bitflags = "1.2.1"
 xmas-elf = "0.7.0"
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }

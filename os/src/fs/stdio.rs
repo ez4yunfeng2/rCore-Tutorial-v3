@@ -1,8 +1,11 @@
 use super::File;
+use crate::drivers::UART_DEVICE;
+use crate::irq::wait_for_irq_and_run_next;
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
 use crate::task::suspend_current_and_run_next;
 use alloc::string::String;
+use k210_pac::Interrupt;
 pub struct Stdin;
 
 pub struct Stdout;
@@ -16,18 +19,16 @@ impl File for Stdin {
     }
     fn read(&self, mut user_buf: UserBuffer) -> usize {
         assert_eq!(user_buf.len(), 1);
-        // busy loop
-        let mut c: usize;
+        let mut ch;
         loop {
-            c = console_getchar();
-            if c == 0 {
-                suspend_current_and_run_next();
-                continue;
-            } else {
-                break;
-            }
+            match UART_DEVICE.getchar() {
+                Some(c) => {
+                    ch = c;
+                    break;
+                },
+                None => wait_for_irq_and_run_next(Interrupt::UARTHS as usize),
+            };
         }
-        let ch = c as u8;
         unsafe {
             user_buf.buffers[0].as_mut_ptr().write_volatile(ch);
         }

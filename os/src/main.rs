@@ -1,10 +1,15 @@
 #![no_std]
 #![no_main]
 #![feature(asm)]
+#![allow(unused)]
 #![feature(fn_traits)]
 #![feature(global_asm)]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+
+use riscv::register::sstatus;
+
+use crate::drivers::BLOCK_DEVICE;
 
 extern crate alloc;
 
@@ -40,6 +45,7 @@ fn clear_bss() {
 
 #[no_mangle]
 pub fn rust_main(hartid: usize) -> ! {
+    unsafe{ asm!("mv tp, {}", in(reg)hartid) }
     if hartid == 0 {
         clear_bss();
         mm::init();
@@ -47,21 +53,21 @@ pub fn rust_main(hartid: usize) -> ! {
         trap::init();
         // trap::enable_timer_interrupt();
         // timer::set_next_trigger();
-
+        console::logger_init();
         println!("[kernel] Lotus core {}", hartid);
         println!("{}", include_str!("banner"));
-
         irq::irq_init();
         fatfs::fs_init();
         task::add_initproc();
     } else {
-        mm::activate();
-        trap::init();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
-        println!("Init hart 1 ");
+        // mm::activate();
+        // trap::init();
+        // trap::enable_timer_interrupt();
+        // timer::set_next_trigger();
+        // println!("Init hart 1 ");
         loop {}
     }
+    BLOCK_DEVICE.change_mode();
     task::run_tasks(hartid);
     panic!("Unreachable in rust_main!");
 }

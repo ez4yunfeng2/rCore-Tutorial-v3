@@ -19,7 +19,8 @@ use super::{
 };
 use crate::{
     fatfs::lfn::{LongNameBuilder, ShortName, LFN_PART_LEN},
-    sync::UPSafeCell, fs::Dirent,
+    fs::Dirent,
+    sync::UPSafeCell,
 };
 
 bitflags! {
@@ -353,7 +354,7 @@ pub struct DirEntry {
     pub lfn_utf16: LfnBuffer,
     pub offset_range: (u64, u64),
     pub entry_pos: u64,
-    pub dirents: u64
+    pub dirents: u64,
 }
 
 impl DirEntry {
@@ -375,7 +376,7 @@ impl DirEntry {
             lfn_utf16: LfnBuffer::new(),
             entry_pos: 0,
             offset_range: (0, 0),
-            dirents: 0
+            dirents: 0,
         }
     }
     pub fn new(first_cluster: u32) -> Self {
@@ -391,7 +392,7 @@ impl DirEntry {
             lfn_utf16: LfnBuffer::new(),
             entry_pos: 0,
             offset_range: (0, 0),
-            dirents: 0
+            dirents: 0,
         }
     }
     pub fn long_file_name_as_ucs2_units(&self) -> Option<&[u16]> {
@@ -548,7 +549,7 @@ impl DirEntry {
             offset,
             disk,
             offset_range,
-            dirents: 0
+            dirents: 0,
         })
     }
 
@@ -687,7 +688,7 @@ impl DirEntry {
                             entry_pos,
                             lfn_utf16: lfn_builder.into_buf(),
                             offset_range: (begin_offset, offset),
-                            dirents: 0
+                            dirents: 0,
                         })
                     });
                 }
@@ -730,13 +731,10 @@ impl DirEntry {
                     true => Ok(Inode::Dir(e)),
                     false => Ok(Inode::File(e.to_file())),
                 }
-            },
-            Ok(None) => {
-                Err(Error::NotFound)
             }
+            Ok(None) => Err(Error::NotFound),
             Err(e) => Err(e),
         }
-
     }
 
     pub fn to_file(&self) -> FileEntry {

@@ -1,3 +1,1 @@
-struct Dir{
-    
-}
+struct Dir {}

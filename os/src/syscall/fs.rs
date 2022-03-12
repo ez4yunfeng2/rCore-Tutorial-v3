@@ -70,7 +70,7 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
         drop(dir);
         let fd = inner.alloc_fd();
         inner.fd_table.insert(fd, Some(tmp));
-        return fd as isize
+        return fd as isize;
     }
     let flag = OpenFlags::from_bits(flags).unwrap();
     let (readable, writable) = flag.read_write();
@@ -228,18 +228,18 @@ pub fn sys_fstat(fd: isize, ptr: *mut Kstat) -> isize {
     1
 }
 
-pub fn sys_getdents(fd: isize, ptr: *mut Dirent,_len: usize) -> isize {
+pub fn sys_getdents(fd: isize, ptr: *mut Dirent, _len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
     let inner = process.inner_exclusive_access();
-    let dirent= translated_refmut(token, ptr);
+    let dirent = translated_refmut(token, ptr);
     let mut name = translated_str(token, (ptr as usize + 19) as *const u8);
     match inner.fd_table.get(&(fd as usize)) {
         Some(Some(file)) => {
             file.getdents(dirent);
             name.clone_from(&file.name());
             1
-        },
+        }
         Some(None) => -1,
         None => -1,
     }
@@ -280,7 +280,7 @@ pub fn sys_mmap(
     -1
 }
 
-pub fn sys_munmap(start:usize,_len:usize) -> isize {
+pub fn sys_munmap(start: usize, _len: usize) -> isize {
     sys_brk(start);
     0
 }

@@ -1,8 +1,9 @@
+use crate::sync::UPSafeCell;
+
 use super::TaskControlBlock;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use lazy_static::*;
-use spin::mutex::Mutex;
 pub struct TaskManager {
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
 }
@@ -17,19 +18,25 @@ impl TaskManager {
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
         self.ready_queue.push_back(task);
     }
+
+    pub fn add_front(&mut self, task: Arc<TaskControlBlock>) {
+        self.ready_queue.push_front(task);
+    }
+
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
         self.ready_queue.pop_front()
     }
 }
 
 lazy_static! {
-    pub static ref TASK_MANAGER: Mutex<TaskManager> = Mutex::new(TaskManager::new());
+    static ref TASK_MANAGER: UPSafeCell<TaskManager> = unsafe{ UPSafeCell::new(TaskManager::new()) };
 }
 
 pub fn add_task(task: Arc<TaskControlBlock>) {
-    TASK_MANAGER.lock().add(task);
+    TASK_MANAGER.try_exclusive_access().unwrap().add(task);
 }
 
 pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
-    TASK_MANAGER.lock().fetch()
+    TASK_MANAGER.try_exclusive_access().unwrap().fetch()
+    
 }
