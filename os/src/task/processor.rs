@@ -56,7 +56,7 @@ pub fn run_tasks(hartid: usize) {
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
-            let mut task_inner = task.inner_exclusive_access();
+            let mut task_inner = task.inner_lock_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
             drop(task_inner);
@@ -102,14 +102,14 @@ pub fn current_user_token() -> usize {
 pub fn current_trap_cx() -> &'static mut TrapContext {
     current_task()
         .unwrap()
-        .inner_exclusive_access()
+        .inner_lock_access()
         .get_trap_cx()
 }
 
 pub fn current_trap_cx_user_va() -> usize {
     current_task()
         .unwrap()
-        .inner_exclusive_access()
+        .inner_lock_access()
         .res
         .as_ref()
         .unwrap()

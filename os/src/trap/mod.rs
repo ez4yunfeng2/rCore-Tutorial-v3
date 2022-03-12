@@ -134,10 +134,12 @@ pub fn trap_from_kernel(){
     let scause = scause::read();
     match scause.cause() {
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
-            println!("Demo!!!!!!!");
             handler_ext();
             sbi_smext_stimer();
         },
+        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            set_next_trigger();
+        }
         Trap::Interrupt(_) => todo!(),
         Trap::Exception(_) => todo!(),
     }

@@ -8,11 +8,8 @@
 #![feature(alloc_error_handler)]
 
 use riscv::register::sstatus;
-
 use crate::drivers::BLOCK_DEVICE;
-
 extern crate alloc;
-
 #[macro_use]
 extern crate bitflags;
 #[macro_use]

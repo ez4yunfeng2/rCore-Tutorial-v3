@@ -33,7 +33,7 @@ pub fn sys_fork() -> isize {
     // modify trap context of new_task, because it returns immediately after switching
     let new_process_inner = new_process.inner_exclusive_access();
     let task = new_process_inner.tasks[0].as_ref().unwrap();
-    let trap_cx = task.inner_exclusive_access().get_trap_cx();
+    let trap_cx = task.inner_lock_access().get_trap_cx();
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
     trap_cx.x[10] = 0;
@@ -109,7 +109,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 
 pub fn sys_brk(addr: usize) -> isize {
     let task = current_task().unwrap();
-    let mut inner = task.inner_exclusive_access();
+    let mut inner = task.inner_lock_access();
     if let Some(res) = inner.res.as_mut() {
         res.brk(addr) as isize
     } else {

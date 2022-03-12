@@ -1,27 +1,24 @@
 use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
+use crate::sync::{SpinMutex, SpinMutexGuard};
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
 use core::cell::{BorrowMutError, RefMut};
+use core::convert::TryInto;
 
 pub struct TaskControlBlock {
     // immutable
     pub process: Weak<ProcessControlBlock>,
     pub kstack: KernelStack,
     // mutable
-    pub inner: UPSafeCell<TaskControlBlockInner>,
+    pub inner: SpinMutex<TaskControlBlockInner>,
 }
 
 impl TaskControlBlock {
-    pub fn try_inner_exclusive_access(
-        &self,
-    ) -> Result<RefMut<'_, TaskControlBlockInner>, BorrowMutError> {
-        self.inner.try_exclusive_access()
-    }
 
-    pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
-        self.inner.exclusive_access()
+    pub fn inner_lock_access(&self) -> SpinMutexGuard<'_, TaskControlBlockInner> {
+        self.inner.lock()
     }
 
     pub fn get_user_token(&self) -> usize {
@@ -63,15 +60,15 @@ impl TaskControlBlock {
         Self {
             process: Arc::downgrade(&process),
             kstack,
-            inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
+            inner:
+                SpinMutex::new(TaskControlBlockInner {
                     res: Some(res),
                     trap_cx_ppn,
                     task_cx: TaskContext::goto_trap_return(kstack_top),
                     task_status: TaskStatus::Ready,
                     exit_code: None,
                 })
-            },
+            ,
         }
     }
 }

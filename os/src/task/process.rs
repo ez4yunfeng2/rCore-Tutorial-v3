@@ -110,7 +110,7 @@ impl ProcessControlBlock {
             true,
         ));
         // prepare trap_cx of main thread
-        let task_inner = task.inner_exclusive_access();
+        let task_inner = task.inner_lock_access();
         let trap_cx = task_inner.get_trap_cx();
         let ustack_top = task_inner.res.as_ref().unwrap().ustack_top();
         let kstack_top = task.kstack.get_top();
@@ -142,7 +142,7 @@ impl ProcessControlBlock {
         // then we alloc user resource for main thread again
         // since memory_set has been changed
         let task = self.inner_exclusive_access().get_task(0);
-        let mut task_inner = task.inner_exclusive_access();
+        let mut task_inner = task.inner_lock_access();
         task_inner.res.as_mut().unwrap().ustack_base = ustack_base;
         task_inner.res.as_mut().unwrap().brk_addr = ustack_base - 4096;
         task_inner.res.as_mut().unwrap().alloc_user_res();
@@ -226,7 +226,7 @@ impl ProcessControlBlock {
             Arc::clone(&child),
             parent
                 .get_task(0)
-                .inner_exclusive_access()
+                .inner_lock_access()
                 .res
                 .as_ref()
                 .unwrap()
@@ -240,7 +240,7 @@ impl ProcessControlBlock {
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
-        let task_inner = task.inner_exclusive_access();
+        let task_inner = task.inner_lock_access();
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
         drop(task_inner);

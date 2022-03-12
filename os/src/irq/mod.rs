@@ -37,13 +37,11 @@ impl IrqManager {
     }
     pub fn inqueue(&mut self, irq: usize, task: Arc<TaskControlBlock>) {
         if let Some(queue) = self.plic_instance.get_mut(&irq) {
-            println!("in {}",irq);
             queue.push_back(task)
         }
     }
     pub fn dequeue(&mut self, irq: usize) -> Option<Arc<TaskControlBlock>> {
         if let Some(queue) = self.plic_instance.get_mut(&irq) {
-            println!("de {} {}",irq, queue.len());
             queue.pop_front()
         } else {
             None
@@ -63,10 +61,9 @@ pub fn irq_init() {
 }
 #[no_mangle]
 pub fn wait_for_irq_and_run_next(irq: usize) {
-    println!("irq {}", irq);
     if let Some(task) = take_current_task() {
         
-        let mut task_inner = task.inner_exclusive_access();
+        let mut task_inner = task.inner_lock_access();
         task_inner.task_status = TaskStatus::Waiting;
         let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
         drop(task_inner);
@@ -81,7 +78,6 @@ pub fn handler_ext() {
     let irq = current_irq();
     match irq {
         27 => {
-            println!("handler");
             BLOCK_DEVICE.handler_interrupt();
             let task =  IRQMANAGER.exclusive_access().dequeue(irq).unwrap();
             add_task(task);

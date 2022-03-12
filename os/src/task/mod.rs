@@ -32,7 +32,7 @@ pub fn suspend_current_and_run_next() {
     // There must be an application running.
     let task = take_current_task().unwrap();
     // ---- access current TCB exclusively
-    let mut task_inner = task.try_inner_exclusive_access().unwrap();
+    let mut task_inner = task.inner_lock_access();
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
@@ -47,7 +47,7 @@ pub fn suspend_current_and_run_next() {
 
 pub fn block_current_and_run_next() {
     let task = take_current_task().unwrap();
-    let mut task_inner = task.inner_exclusive_access();
+    let mut task_inner = task.inner_lock_access();
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     task_inner.task_status = TaskStatus::Blocking;
     drop(task_inner);
@@ -56,7 +56,7 @@ pub fn block_current_and_run_next() {
 
 pub fn exit_current_and_run_next(exit_code: i32) {
     let task = take_current_task().unwrap();
-    let mut task_inner = task.inner_exclusive_access();
+    let mut task_inner = task.inner_lock_access();
     let process = task.process.upgrade().unwrap();
 
     let tid = task_inner.res.as_ref().unwrap().tid;
@@ -90,7 +90,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
         // otherwise they will be deallocated twice
         for task in process_inner.tasks.iter().filter(|t| t.is_some()) {
             let task = task.as_ref().unwrap();
-            let mut task_inner = task.inner_exclusive_access();
+            let mut task_inner = task.inner_lock_access();
             task_inner.res = None;
         }
 

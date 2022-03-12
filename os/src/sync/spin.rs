@@ -5,6 +5,8 @@ pub struct SpinMutex<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
+unsafe impl<T> Sync for SpinMutex<T>{}
+unsafe impl<T> Send for SpinMutex<T>{}
 pub struct SpinMutexGuard<'a, T: ?Sized + 'a> {
     lock: &'a AtomicBool,
     data: &'a mut T,
