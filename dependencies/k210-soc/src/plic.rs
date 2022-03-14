@@ -21,23 +21,23 @@ pub fn set_priority(pin: Interrupt, value: u32) {
     }
 }
 
-pub fn set_thershold(value: u32) {
+pub fn set_thershold(value: u32, hartid: usize) {
     unsafe {
         let ptr = pac::PLIC::ptr();
-        (*ptr).targets[0].threshold.write(|w| w.bits(value));
+        (*ptr).targets[hartid].threshold.write(|w| w.bits(value));
     }
 }
 
-pub fn current_irq() -> usize {
+pub fn current_irq(hartid: usize) -> usize {
     unsafe {
         let ptr = pac::PLIC::ptr();
-        (*ptr).targets[0].claim.read().bits() as usize
+        (*ptr).targets[hartid].claim.read().bits() as usize
     }
 }
 
-pub fn clear_irq(irq: usize) {
+pub fn clear_irq(irq: usize, hartid: usize) {
     unsafe {
         let ptr = pac::PLIC::ptr();
-        (*ptr).targets[0].claim.write(|w|w.bits(irq as u32));
+        (*ptr).targets[hartid].claim.write(|w|w.bits(irq as u32));
     }
 }

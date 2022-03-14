@@ -53,7 +53,7 @@ pub fn rust_main(hartid: usize) -> ! {
         // timer::set_next_trigger();
         println!("[kernel] Lotus core {}", hartid);
         println!("{}", include_str!("banner"));
-        irq::irq_init();
+        irq::irq_init(hartid);
         fatfs::fs_init();
         task::add_initproc();
 

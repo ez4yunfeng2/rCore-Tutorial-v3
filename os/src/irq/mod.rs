@@ -1,7 +1,7 @@
 use crate::{
-    drivers::{BLOCK_DEVICE, UART_DEVICE},
+    drivers::{BLOCK_DEVICE, UART_DEVICE, PLIC_DRIVE},
     sync::{SpinMutex, UPSafeCell},
-    task::{add_task, schedule, take_current_task, TaskContext, TaskControlBlock, TaskStatus},
+    task::{add_task, schedule, take_current_task, TaskContext, TaskControlBlock, TaskStatus, current_hartid},
 };
 use alloc::{
     collections::{BTreeMap, VecDeque},
@@ -33,8 +33,8 @@ impl IrqManager {
     }
 
     pub fn register_irq(&mut self, source: Interrupt) {
-        plic_enable(source);
-        set_priority(source, 1);
+        PLIC_DRIVE.enable(source, current_hartid());
+        PLIC_DRIVE.set_priority(1, source);
         self.plic_instance.insert(source as usize, VecDeque::new());
     }
     pub fn inqueue(&mut self, irq: usize, task: Arc<TaskControlBlock>) {
@@ -51,16 +51,17 @@ impl IrqManager {
     }
 }
 
-pub fn irq_init() {
+pub fn irq_init(hartid: usize) {
     unsafe {
         sie::set_ssoft();
-        set_thershold(0);
+        PLIC_DRIVE.set_thershold(0, hartid);
         let mut irq_manager = IRQMANAGER.lock();
         irq_manager.register_irq(Interrupt::DMA0);
         irq_manager.register_irq(Interrupt::UARTHS);
         println!("Interrupt Init Ok");
     }
 }
+
 #[no_mangle]
 pub fn wait_for_irq_and_run_next(irq: usize) {
     if let Some(task) = take_current_task() {
@@ -76,8 +77,8 @@ pub fn wait_for_irq_and_run_next(irq: usize) {
 }
 
 pub fn handler_ext() {
-    let irq = current_irq();
     let mut irq_manager = IRQMANAGER.lock();
+    let irq = PLIC_DRIVE.current(current_hartid());
     match irq {
         27 => {
             BLOCK_DEVICE.handler_interrupt();
@@ -95,5 +96,5 @@ pub fn handler_ext() {
             panic!("unknow irq")
         }
     }
-    clear_irq(irq);
+    PLIC_DRIVE.clear(irq, current_hartid());
 }
