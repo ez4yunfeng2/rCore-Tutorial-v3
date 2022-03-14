@@ -8,29 +8,26 @@ mod task;
 
 use crate::fs::{open_file, OpenFlags};
 use alloc::sync::Arc;
-
-use k210_pac::fft::status;
 use lazy_static::*;
 use manager::fetch_task;
 use process::ProcessControlBlock;
-use riscv::register::sstatus;
 use switch::__switch;
 
 pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 pub use manager::add_task;
 pub use processor::{
-    current_hartid, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, run_tasks, schedule, take_current_task
+    current_hartid, current_process, current_processor, current_task, current_trap_cx,
+    current_trap_cx_user_va, current_user_token, init_hart, run_tasks, schedule, take_current_task,
 };
 pub use task::{TaskControlBlock, TaskStatus};
 
-
-
-
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
-    let task = take_current_task().unwrap();
+    let task = match take_current_task() {
+        Some(task) => task,
+        None => return,
+    };
     // ---- access current TCB exclusively
     let mut task_inner = task.inner_lock_access();
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;

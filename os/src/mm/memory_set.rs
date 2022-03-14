@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.inner.borrow_mut().token()
+    KERNEL_SPACE.exclusive_access().token()
 }
 
 pub struct MemorySet {
@@ -240,7 +240,6 @@ impl MemorySet {
             satp::write(satp);
             asm!("sfence.vma");
         }
-        println!("satp {:#x}", satp::read().bits())
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)

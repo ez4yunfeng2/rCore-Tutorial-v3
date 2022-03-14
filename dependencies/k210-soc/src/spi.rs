@@ -219,25 +219,6 @@ impl<IF: SPI01> SPI for SPIImpl<IF> {
                 *val = X::trunc(self.spi.dr[0].read().bits());
                 fifo_len -= 1;
             }
-
-            // let mut v_rx_len = rx.len() as u32;
-            // let mut i = 0;
-            // let mut timeout = 0x1;
-            // while v_rx_len > 0 && timeout > 0{
-            //     let mut fifo_len = self.spi.rxflr.read().bits();
-            //     fifo_len = if fifo_len < v_rx_len {
-            //         fifo_len
-            //     } else {
-            //         v_rx_len
-            //     };
-            //     for _ in 0..fifo_len {
-            //         rx[i] = X::trunc(self.spi.dr[0].read().bits());
-            //         i = i + 1
-            //     }
-            //     v_rx_len -= fifo_len;
-            //     timeout = timeout + 1;
-            // }
-
             self.spi.ser.write(|w| w.bits(0x00));
             self.spi.ssienr.write(|w| w.bits(0x00));
         }

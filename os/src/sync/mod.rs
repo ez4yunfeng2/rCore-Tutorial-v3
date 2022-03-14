@@ -1,9 +1,9 @@
 mod mutex;
 mod semaphore;
-mod up;
 mod spin;
+mod up;
 
 pub use mutex::{Mutex, MutexBlocking, MutexSpin};
 pub use semaphore::Semaphore;
+pub use spin::{intr_off, intr_on, SpinMutex, SpinMutexGuard};
 pub use up::UPSafeCell;
-pub use spin::{SpinMutex, SpinMutexGuard};

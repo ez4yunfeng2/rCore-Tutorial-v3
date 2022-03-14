@@ -1,12 +1,21 @@
-use core::{sync::atomic::{AtomicBool, Ordering}, cell::UnsafeCell, ops::{Deref, DerefMut}};
+#[allow(unused)]
+use core::{
+    cell::UnsafeCell,
+    ops::{Deref, DerefMut},
+    sync::atomic::{AtomicBool, Ordering},
+};
+
+use riscv::register::sstatus;
+
+use crate::task::current_processor;
 
 pub struct SpinMutex<T: ?Sized> {
     pub(crate) lock: AtomicBool,
     data: UnsafeCell<T>,
 }
 
-unsafe impl<T> Sync for SpinMutex<T>{}
-unsafe impl<T> Send for SpinMutex<T>{}
+unsafe impl<T> Sync for SpinMutex<T> {}
+unsafe impl<T> Send for SpinMutex<T> {}
 pub struct SpinMutexGuard<'a, T: ?Sized + 'a> {
     lock: &'a AtomicBool,
     data: &'a mut T,
@@ -30,10 +39,13 @@ impl<T: ?Sized> SpinMutex<T> {
 
     #[inline(always)]
     pub fn lock(&self) -> SpinMutexGuard<T> {
-        while self.lock.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-            while self.is_locked() {
-                
-            }
+        push_off();
+        while self
+            .lock
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            while self.is_locked() {}
         }
 
         SpinMutexGuard {
@@ -50,7 +62,11 @@ impl<T: ?Sized> SpinMutex<T> {
     pub fn try_lock(&self) -> Option<SpinMutexGuard<T>> {
         // The reason for using a strong compare_exchange is explained here:
         // https://github.com/Amanieu/parking_lot/pull/207#issuecomment-575869107
-        if self.lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+        if self
+            .lock
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
             Some(SpinMutexGuard {
                 lock: &self.lock,
                 data: unsafe { &mut *self.data.get() },
@@ -72,7 +88,6 @@ impl<T> From<T> for SpinMutex<T> {
         Self::new(data)
     }
 }
-
 
 impl<'a, T: ?Sized> SpinMutexGuard<'a, T> {
     #[inline(always)]
@@ -99,5 +114,43 @@ impl<'a, T: ?Sized> DerefMut for SpinMutexGuard<'a, T> {
 impl<'a, T: ?Sized> Drop for SpinMutexGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.store(false, Ordering::Release);
+        pop_off();
+    }
+}
+
+#[inline]
+pub fn intr_on() {
+    unsafe {
+        sstatus::set_sie();
+    }
+}
+#[inline]
+pub fn intr_off() {
+    unsafe {
+        sstatus::clear_sie();
+    }
+}
+
+pub fn push_off() {
+    let processor = current_processor().unwrap();
+    let old = sstatus::read().sie();
+    intr_off();
+    if processor.noff == 0 {
+        processor.intena = old
+    }
+    processor.noff += 1;
+}
+
+pub fn pop_off() {
+    let processor = current_processor().unwrap();
+    if sstatus::read().sie() {
+        panic!("pop_off - interruptible")
+    }
+    if processor.noff < 1 {
+        panic!("pop_off {}", processor.noff)
+    }
+    processor.noff -= 1;
+    if processor.noff == 0 && processor.intena {
+        intr_on()
     }
 }

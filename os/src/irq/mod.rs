@@ -1,5 +1,7 @@
 use crate::{
-    sync::UPSafeCell, task::{TaskControlBlock, take_current_task, TaskContext, schedule, add_task, TaskStatus}, drivers::{BLOCK_DEVICE, UART_DEVICE},
+    drivers::{BLOCK_DEVICE, UART_DEVICE},
+    sync::{SpinMutex, UPSafeCell},
+    task::{add_task, schedule, take_current_task, TaskContext, TaskControlBlock, TaskStatus},
 };
 use alloc::{
     collections::{BTreeMap, VecDeque},
@@ -8,16 +10,16 @@ use alloc::{
 use k210_pac::Interrupt;
 use k210_soc::{
     dmac::channel_interrupt_clear,
-    plic::{plic_enable, set_priority, set_thershold, current_irq, clear_irq},
+    plic::{clear_irq, current_irq, plic_enable, set_priority, set_thershold},
     sysctl::dma_channel,
 };
 use lazy_static::lazy_static;
-use riscv::register::{sstatus, sie};
+use riscv::register::{sie, sstatus};
 
 lazy_static! {
     pub static ref FLAG: UPSafeCell<bool> = unsafe { UPSafeCell::new(true) };
-    pub static ref IRQMANAGER: Arc<UPSafeCell<IrqManager>> =
-        Arc::new(unsafe { UPSafeCell::new(IrqManager::new()) });
+    pub static ref IRQMANAGER: Arc<SpinMutex<IrqManager>> =
+        Arc::new(SpinMutex::new(IrqManager::new()));
 }
 
 pub struct IrqManager {
@@ -47,46 +49,46 @@ impl IrqManager {
             None
         }
     }
-
 }
 
 pub fn irq_init() {
     unsafe {
         sie::set_ssoft();
         set_thershold(0);
-        IRQMANAGER.exclusive_access().register_irq(Interrupt::DMA0);
-        IRQMANAGER.exclusive_access().register_irq(Interrupt::UARTHS);
+        let mut irq_manager = IRQMANAGER.lock();
+        irq_manager.register_irq(Interrupt::DMA0);
+        irq_manager.register_irq(Interrupt::UARTHS);
         println!("Interrupt Init Ok");
     }
 }
 #[no_mangle]
 pub fn wait_for_irq_and_run_next(irq: usize) {
     if let Some(task) = take_current_task() {
-        
         let mut task_inner = task.inner_lock_access();
         task_inner.task_status = TaskStatus::Waiting;
         let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
         drop(task_inner);
-        IRQMANAGER.exclusive_access().inqueue(irq, task);
+        IRQMANAGER.lock().inqueue(irq, task);
         schedule(task_cx_ptr);
     } else {
-        panic!("Fuck")
+        panic!("too eaily irq")
     }
 }
 
 pub fn handler_ext() {
     let irq = current_irq();
+    let mut irq_manager = IRQMANAGER.lock();
     match irq {
         27 => {
             BLOCK_DEVICE.handler_interrupt();
-            let task =  IRQMANAGER.exclusive_access().dequeue(irq).unwrap();
+            let task = irq_manager.dequeue(irq).unwrap();
             add_task(task);
         }
         33 => {
             UART_DEVICE.handler_interrupt();
-            match IRQMANAGER.exclusive_access().dequeue(irq) {
+            match irq_manager.dequeue(irq) {
                 Some(task) => add_task(task),
-                None => {},
+                None => {}
             }
         }
         _ => {

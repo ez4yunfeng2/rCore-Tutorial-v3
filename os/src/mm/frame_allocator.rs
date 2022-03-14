@@ -1,5 +1,5 @@
 use super::{PhysAddr, PhysPageNum};
-use crate::config::MEMORY_END;
+use crate::{config::MEMORY_END, sync::SpinMutex};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
@@ -85,15 +85,15 @@ impl FrameAllocator for StackFrameAllocator {
 type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
-    pub static ref FRAME_ALLOCATOR: UPSafeCell<FrameAllocatorImpl> =
-        unsafe { UPSafeCell::new(FrameAllocatorImpl::new()) };
+    pub static ref FRAME_ALLOCATOR: SpinMutex<FrameAllocatorImpl> =
+        SpinMutex::new(FrameAllocatorImpl::new());
 }
 
 pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
-    FRAME_ALLOCATOR.inner.borrow_mut().init(
+    FRAME_ALLOCATOR.lock().init(
         PhysAddr::from(ekernel as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor(),
     );
@@ -101,14 +101,13 @@ pub fn init_frame_allocator() {
 
 pub fn frame_alloc() -> Option<FrameTracker> {
     FRAME_ALLOCATOR
-        .inner
-        .borrow_mut()
+        .lock()
         .alloc()
         .map(|ppn| FrameTracker::new(ppn))
 }
 
 pub fn frame_dealloc(ppn: PhysPageNum) {
-    FRAME_ALLOCATOR.inner.borrow_mut().dealloc(ppn);
+    FRAME_ALLOCATOR.lock().dealloc(ppn);
 }
 
 #[allow(unused)]

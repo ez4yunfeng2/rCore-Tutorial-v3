@@ -15,7 +15,7 @@ pub struct UartHs {
 impl UartHs {
     pub fn new() -> Self {
         Self {
-            buffer: unsafe{ UPSafeCell::new(VecDeque::new()) },
+            buffer: unsafe { UPSafeCell::new(VecDeque::new()) },
         }
     }
 }
@@ -41,10 +41,10 @@ impl UartDevice for UartHs {
             let recv = (*ptr).rxdata.read();
             match recv.empty().bits() {
                 true => panic!("Not char"),
-                false => { 
+                false => {
                     let ch = recv.data().bits();
                     self.buffer.exclusive_access().push_back(ch);
-                },
+                }
             }
         }
     }

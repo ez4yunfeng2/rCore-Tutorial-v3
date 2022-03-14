@@ -4,11 +4,11 @@
 #![allow(unused)]
 #![feature(fn_traits)]
 #![feature(global_asm)]
+#![feature(const_btree_new)]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 
-use riscv::register::sstatus;
-use crate::drivers::BLOCK_DEVICE;
+use crate::{drivers::BLOCK_DEVICE, sbi::send_ipi};
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
@@ -42,20 +42,22 @@ fn clear_bss() {
 
 #[no_mangle]
 pub fn rust_main(hartid: usize) -> ! {
-    unsafe{ asm!("mv tp, {}", in(reg)hartid) }
+    unsafe { asm!("mv tp, {}", in(reg)hartid) }
     if hartid == 0 {
         clear_bss();
         mm::init();
         mm::remap_test();
+        console::logger_init();
         trap::init();
         // trap::enable_timer_interrupt();
         // timer::set_next_trigger();
-        console::logger_init();
         println!("[kernel] Lotus core {}", hartid);
         println!("{}", include_str!("banner"));
         irq::irq_init();
         fatfs::fs_init();
         task::add_initproc();
+
+        // send_ipi(1);
     } else {
         // mm::activate();
         // trap::init();

@@ -1,23 +1,35 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{ProcessControlBlock, TaskContext, TaskControlBlock};
-use crate::config::{MAX_HARTID, intr_on};
-use crate::sync::UPSafeCell;
+use crate::config::MAX_HARTID;
+use crate::sync::intr_on;
 use crate::trap::TrapContext;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
-use k210_soc::sleep::usleep;
-use lazy_static::*;
-use riscv::register::sstatus;
+
+pub static mut PROCESSORS: BTreeMap<usize, Processor> = BTreeMap::new();
 
 pub struct Processor {
+    pub noff: usize,
+    pub intena: bool,
     current: Option<Arc<TaskControlBlock>>,
     idle_task_cx: TaskContext,
+}
+
+pub fn new() -> Processor {
+    Processor {
+        noff: 0,
+        intena: false,
+        current: None,
+        idle_task_cx: TaskContext::zero_init(),
+    }
 }
 
 impl Processor {
     pub fn new() -> Self {
         Self {
+            noff: 0,
+            intena: false,
             current: None,
             idle_task_cx: TaskContext::zero_init(),
         }
@@ -33,25 +45,23 @@ impl Processor {
     }
 }
 
-lazy_static! {
-    pub static ref PROCESSORS: BTreeMap<usize, UPSafeCell<Processor>> = {
-        let mut btree = BTreeMap::new();
-        for i in 0..MAX_HARTID {
-            btree.insert(i, unsafe { UPSafeCell::new(Processor::new()) });
-        }
-        btree
-    };
-}
-
 pub fn current_hartid() -> usize {
     let mut tp: usize;
     unsafe { asm!("mv {}, tp", out(reg) tp) };
     tp
 }
 
+pub fn init_hart() {
+    unsafe {
+        for hartid in 0..MAX_HARTID {
+            PROCESSORS.insert(hartid, Processor::new());
+        }
+    }
+}
+
 pub fn run_tasks(hartid: usize) {
     loop {
-        let mut processor = PROCESSORS.get(&hartid).unwrap().inner.borrow_mut();
+        let mut processor = current_processor().unwrap();
         intr_on();
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
@@ -73,19 +83,17 @@ pub fn run_tasks(hartid: usize) {
     }
 }
 
+pub fn current_processor() -> Option<&'static mut Processor> {
+    unsafe { PROCESSORS.get_mut(&current_hartid()) }
+}
+
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    let mut processor = PROCESSORS
-        .get(&current_hartid())
-        .unwrap()
-        .exclusive_access();
+    let processor = current_processor().unwrap();
     processor.take_current()
 }
 
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    let processor = PROCESSORS
-        .get(&current_hartid())
-        .unwrap()
-        .exclusive_access();
+    let processor = current_processor().unwrap();
     processor.current()
 }
 
@@ -100,10 +108,7 @@ pub fn current_user_token() -> usize {
 }
 
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task()
-        .unwrap()
-        .inner_lock_access()
-        .get_trap_cx()
+    current_task().unwrap().inner_lock_access().get_trap_cx()
 }
 
 pub fn current_trap_cx_user_va() -> usize {
@@ -116,20 +121,9 @@ pub fn current_trap_cx_user_va() -> usize {
         .trap_cx_user_va()
 }
 
-// pub fn current_kstack_top() -> usize {
-//     match current_task() {
-//         Some(task) => task.kstack.get_top(),
-//         None => 0,
-//     }
-// }
-
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     // assert_eq!(sstatus::read().sie(),false);
-    let mut processor = PROCESSORS
-        .get(&current_hartid())
-        .unwrap()
-        .inner
-        .borrow_mut();
+    let processor = current_processor().unwrap();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(processor);
     unsafe {

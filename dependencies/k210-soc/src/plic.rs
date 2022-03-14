@@ -35,9 +35,9 @@ pub fn current_irq() -> usize {
     }
 }
 
-pub fn clear_irq() {
+pub fn clear_irq(irq: usize) {
     unsafe {
         let ptr = pac::PLIC::ptr();
-        (*ptr).targets[0].claim.modify(|r,w|w.bits(r.bits()))
+        (*ptr).targets[0].claim.write(|w|w.bits(irq as u32));
     }
 }

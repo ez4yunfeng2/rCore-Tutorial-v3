@@ -1,4 +1,4 @@
-use core::cell::{RefMut, BorrowError, BorrowMutError};
+use core::cell::{BorrowMutError, RefMut};
 
 use super::add_task;
 use super::id::RecycleAllocator;
@@ -68,7 +68,9 @@ impl ProcessControlBlockInner {
 }
 
 impl ProcessControlBlock {
-    pub fn try_inner_exclusive_access(&self) -> Result<RefMut<ProcessControlBlockInner>, BorrowMutError> {
+    pub fn try_inner_exclusive_access(
+        &self,
+    ) -> Result<RefMut<ProcessControlBlockInner>, BorrowMutError> {
         self.inner.try_exclusive_access()
     }
 
@@ -101,7 +103,7 @@ impl ProcessControlBlock {
                     semaphore_list: Vec::new(),
                     dir_entry: Some(root()),
                 })
-              } ,
+            },
         });
         // create a main thread, we should allocate ustack and trap_cx here
         let task = Arc::new(TaskControlBlock::new(
@@ -205,19 +207,21 @@ impl ProcessControlBlock {
         // create child process pcb
         let child = Arc::new(Self {
             pid,
-            inner: unsafe{ UPSafeCell::new(ProcessControlBlockInner {
-                is_zombie: false,
-                memory_set,
-                parent: Some(Arc::downgrade(self)),
-                children: Vec::new(),
-                exit_code: 0,
-                fd_table: btree,
-                tasks: Vec::new(),
-                task_res_allocator: RecycleAllocator::new(),
-                mutex_list: Vec::new(),
-                semaphore_list: Vec::new(),
-                dir_entry: parent.dir_entry.clone(),
-            }) },
+            inner: unsafe {
+                UPSafeCell::new(ProcessControlBlockInner {
+                    is_zombie: false,
+                    memory_set,
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    exit_code: 0,
+                    fd_table: btree,
+                    tasks: Vec::new(),
+                    task_res_allocator: RecycleAllocator::new(),
+                    mutex_list: Vec::new(),
+                    semaphore_list: Vec::new(),
+                    dir_entry: parent.dir_entry.clone(),
+                })
+            },
         });
         // add child
         parent.children.push(Arc::clone(&child));

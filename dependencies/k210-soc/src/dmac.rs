@@ -4,6 +4,7 @@
 //! DMAC peripheral
 //use k210_hal::pac;
 use k210_pac as pac;
+use pac::Interrupt;
 use pac::dmac::channel::cfg::{TT_FC_A,HS_SEL_SRC_A};
 use pac::dmac::channel::ctl::{SMS_A};
 
@@ -607,15 +608,29 @@ impl DMAC {
 
     /** Wait for dmac work done. */
     pub fn wait_done(&self, channel_num: dma_channel) {
-
-        extern "C" {
-            fn wait_for_irq();
-        }
-        while !self.is_idle(channel_num) {}
-        unsafe { wait_for_irq() }
-        
-        
         // self.wait_idle(channel_num);
+
+        // extern "C" {
+        //     fn wait_for_irq();
+        // }
+        // while !self.is_idle(channel_num) {}
+        // unsafe { wait_for_irq() }
+        
+        extern "C" { fn wait_for_irq_and_run_next(irq: usize); }
+        unsafe{ 
+            wait_for_irq_and_run_next(match channel_num {
+                dma_channel::CHANNEL0 => Interrupt::DMA0,
+                dma_channel::CHANNEL1 => Interrupt::DMA1,
+                dma_channel::CHANNEL2 => Interrupt::DMA2,
+                dma_channel::CHANNEL3 => Interrupt::DMA3,
+                dma_channel::CHANNEL4 => Interrupt::DMA4,
+                dma_channel::CHANNEL5 => Interrupt::DMA5,
+            } as usize) 
+        }
+        // while !self.is_idle(channel_num) {}
+        if !self.is_idle(channel_num) {
+            panic!("bus busy")
+        }
     }
 
     /** Determine if a DMA channel is idle or not. */
@@ -652,4 +667,22 @@ pub fn channel_interrupt_clear(channel:dma_channel) {
         (*ptr).channel[channel.idx()].intclear
         .write(|w| w.bits(0xffffffff));
     }
+}
+
+pub fn check_channel_busy(channel_num: dma_channel) -> bool {
+    use dma_channel::*;
+    unsafe {
+        let ptr = pac::DMAC::ptr();
+        match channel_num {
+            CHANNEL0 => (*ptr).chen.read().ch1_en().bit(),
+            CHANNEL1 => (*ptr).chen.read().ch2_en().bit(),
+            CHANNEL2 => (*ptr).chen.read().ch3_en().bit(),
+            CHANNEL3 => (*ptr).chen.read().ch4_en().bit(),
+            CHANNEL4 => (*ptr).chen.read().ch5_en().bit(),
+            CHANNEL5 => (*ptr).chen.read().ch6_en().bit(),
+        }
+    }
+    
+    // Note: Kendryte SDK writes back the value after reading it,
+    // is this necessary? It seems not.
 }

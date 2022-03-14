@@ -15,8 +15,11 @@ pub use page_table::{
     PageTableEntry, UserBuffer, UserBufferIterator,
 };
 
+use crate::task;
+
 pub fn init() {
     heap_allocator::init_heap();
+    task::init_hart();
     frame_allocator::init_frame_allocator();
     KERNEL_SPACE.inner.borrow_mut().activate();
 }

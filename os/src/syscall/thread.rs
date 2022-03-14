@@ -11,11 +11,7 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     // create a new thread
     let new_task = Arc::new(TaskControlBlock::new(
         Arc::clone(&process),
-        task.inner_lock_access()
-            .res
-            .as_ref()
-            .unwrap()
-            .ustack_base,
+        task.inner_lock_access().res.as_ref().unwrap().ustack_base,
         true,
     ));
     // add new task to scheduler

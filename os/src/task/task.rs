@@ -4,8 +4,6 @@ use crate::sync::{SpinMutex, SpinMutexGuard};
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
-use core::cell::{BorrowMutError, RefMut};
-use core::convert::TryInto;
 
 pub struct TaskControlBlock {
     // immutable
@@ -16,7 +14,6 @@ pub struct TaskControlBlock {
 }
 
 impl TaskControlBlock {
-
     pub fn inner_lock_access(&self) -> SpinMutexGuard<'_, TaskControlBlockInner> {
         self.inner.lock()
     }
@@ -60,15 +57,13 @@ impl TaskControlBlock {
         Self {
             process: Arc::downgrade(&process),
             kstack,
-            inner:
-                SpinMutex::new(TaskControlBlockInner {
-                    res: Some(res),
-                    trap_cx_ppn,
-                    task_cx: TaskContext::goto_trap_return(kstack_top),
-                    task_status: TaskStatus::Ready,
-                    exit_code: None,
-                })
-            ,
+            inner: SpinMutex::new(TaskControlBlockInner {
+                res: Some(res),
+                trap_cx_ppn,
+                task_cx: TaskContext::goto_trap_return(kstack_top),
+                task_status: TaskStatus::Ready,
+                exit_code: None,
+            }),
         }
     }
 }

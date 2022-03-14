@@ -3,9 +3,9 @@ use crate::drivers::UART_DEVICE;
 use crate::irq::wait_for_irq_and_run_next;
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
-use crate::task::suspend_current_and_run_next;
 use alloc::string::String;
 use k210_pac::Interrupt;
+use riscv::register::sstatus;
 pub struct Stdin;
 
 pub struct Stdout;
@@ -25,7 +25,7 @@ impl File for Stdin {
                 Some(c) => {
                     ch = c;
                     break;
-                },
+                }
                 None => wait_for_irq_and_run_next(Interrupt::UARTHS as usize),
             };
         }

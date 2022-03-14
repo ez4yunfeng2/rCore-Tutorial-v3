@@ -1,15 +1,16 @@
 mod context;
-pub use context::TrapContext;
-use riscv::register::sstatus::{self, SPP};
-use crate::config::{TRAMPOLINE, intr_off};
+use crate::config::TRAMPOLINE;
 use crate::irq::handler_ext;
 use crate::sbi::sbi_smext_stimer;
+use crate::sync::{intr_off, intr_on};
 use crate::syscall::syscall;
 use crate::task::{
     current_trap_cx, current_trap_cx_user_va, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
 };
 use crate::timer::{check_timer, set_next_trigger};
+pub use context::TrapContext;
+use riscv::register::sstatus::{self, SPP};
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
@@ -24,7 +25,7 @@ pub fn init() {
 
 fn set_kernel_trap_entry() {
     unsafe {
-        extern  "C" {
+        extern "C" {
             fn __from_kernel_save();
         }
         stvec::write(__from_kernel_save as usize, TrapMode::Direct);
@@ -54,6 +55,7 @@ pub fn trap_handler() -> ! {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
+            intr_on();
             // get system call return value
             let result = syscall(
                 cx.x[17],
@@ -84,13 +86,12 @@ pub fn trap_handler() -> ! {
             exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            println!("From U SupervisorTimer");
             set_next_trigger();
             check_timer();
             suspend_current_and_run_next();
         }
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
-            // irq_handler();
-            println!("Fuck!!!!!!!");
             handler_ext();
             sbi_smext_stimer();
         }
@@ -129,18 +130,23 @@ pub fn trap_return() -> ! {
 }
 
 #[no_mangle]
-pub fn trap_from_kernel(){
+pub fn trap_from_kernel() {
     assert_eq!(sstatus::read().spp(), SPP::Supervisor);
     let scause = scause::read();
     match scause.cause() {
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
             handler_ext();
             sbi_smext_stimer();
-        },
+        }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            println!("From S SupervisorTimer");
             set_next_trigger();
+            check_timer();
+            suspend_current_and_run_next();
         }
         Trap::Interrupt(_) => todo!(),
-        Trap::Exception(_) => todo!(),
+        Trap::Exception(e) => {
+            panic!("{:?}", e);
+        }
     }
 }

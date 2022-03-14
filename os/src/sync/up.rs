@@ -1,8 +1,6 @@
 use core::cell::{BorrowMutError, RefCell, RefMut};
 
-use riscv::register::sstatus;
-
-use crate::config::{intr_on, intr_off};
+use super::spin::{pop_off, push_off};
 
 /// Wrap a static data structure inside it so that we are
 /// able to access it without any `unsafe`.
@@ -32,14 +30,15 @@ impl<T> UPSafeCell<T> {
     }
     // 在调用 try_exclusive_access 的地方 unwrap 方便暴露 错误位置
     pub fn try_exclusive_access(&self) -> Result<RefMut<'_, T>, BorrowMutError> {
-        intr_off();
-        self.inner.try_borrow_mut()
+        match self.inner.try_borrow_mut() {
+            Ok(item) => Ok(item),
+            Err(err) => Err(err),
+        }
     }
 }
 
 impl<T> Drop for UPSafeCell<T> {
     fn drop(&mut self) {
-        intr_on();
-        drop(self)
+        drop(self);
     }
 }

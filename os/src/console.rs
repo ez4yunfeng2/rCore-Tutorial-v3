@@ -1,21 +1,22 @@
-// use alloc::sync::Arc;
-use log::{Level, LevelFilter, Log, Metadata, Record};
-// use lazy_static::lazy_static;
-// use spin::mutex::Mutex;
-use crate::drivers::UART_DEVICE;
+use crate::{
+    drivers::{UartDevice, UART_DEVICE},
+    sync::{SpinMutex, UPSafeCell},
+};
+use alloc::sync::Arc;
 use core::fmt::{self, Write};
-
-struct Stdout /* (Arc<dyn UartDevice>) */;
-
-// lazy_static!(
-//     static ref STDOUT: Mutex<Stdout> = Mutex::new(Stdout(UART_DEVICE.clone()));
-// );
+use lazy_static::lazy_static;
+use log::{Level, LevelFilter, Log, Metadata, Record};
+struct Stdout(Arc<dyn UartDevice>);
+lazy_static!(
+    static ref STDOUT: SpinMutex<Stdout> = SpinMutex::new(Stdout(UART_DEVICE.clone()));
+    // static ref STDOUT: UPSafeCell<Stdout> = unsafe{ UPSafeCell::new(Stdout(UART_DEVICE.clone())) };
+);
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
-            // self.0.putchar(c as u8);
-            UART_DEVICE.putchar(c as u8);
+            self.0.putchar(c as u8);
+            // UART_DEVICE.putchar(c as u8);
             // use crate::sbi::console_putchar;
             // console_putchar(c as usize)
         }
@@ -24,8 +25,8 @@ impl Write for Stdout {
 }
 
 pub fn print(args: fmt::Arguments) {
-    // STDOUT.lock().write_fmt(args).unwrap();
-    Stdout.write_fmt(args).unwrap();
+    STDOUT.lock().write_fmt(args).unwrap();
+    // STDOUT.exclusive_access().write_fmt(args).unwrap()
 }
 
 #[macro_export]
