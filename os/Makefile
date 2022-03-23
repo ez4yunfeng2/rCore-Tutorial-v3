@@ -55,6 +55,9 @@ sdcard: fs-img
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
+asm:
+	@$(OBJDUMP) $(KERNEL_ELF) -d > os.s
+
 fs-img: $(APPS)
 	@cd ../user && make build
 	@rm $(FS_IMG) -f

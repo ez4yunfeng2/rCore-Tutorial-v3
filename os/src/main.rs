@@ -8,7 +8,12 @@
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 
-use crate::{drivers::BLOCK_DEVICE, sbi::send_ipi};
+use core::sync::atomic::{fence, Ordering};
+
+use k210_pac::dmac::channel::status;
+use riscv::register::{sstatus, sie};
+
+use crate::{drivers::BLOCK_DEVICE, sbi::{send_ipi, sbi_smext_stimer}, sync::{intr_on, intr_off}};
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
@@ -47,26 +52,26 @@ pub fn rust_main(hartid: usize) -> ! {
         clear_bss();
         mm::init();
         mm::remap_test();
+        println!("[kernel] Lotus core {} boot", hartid);
+        println!("{}", include_str!("banner"));
         console::logger_init();
         trap::init();
-        // trap::enable_timer_interrupt();
-        // timer::set_next_trigger();
-        println!("[kernel] Lotus core {}", hartid);
-        println!("{}", include_str!("banner"));
         irq::irq_init(hartid);
-        fatfs::fs_init();
         task::add_initproc();
-
-        // send_ipi(1);
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+        BLOCK_DEVICE.change_mode();
+        send_ipi(1);
     } else {
+        loop {  }
         // mm::activate();
         // trap::init();
+        // irq::irq_init(hartid);
         // trap::enable_timer_interrupt();
         // timer::set_next_trigger();
-        // println!("Init hart 1 ");
-        loop {}
+        // println!("[kernel] Lotus core {} boot", hartid);
+        
     }
-    BLOCK_DEVICE.change_mode();
     task::run_tasks(hartid);
     panic!("Unreachable in rust_main!");
 }

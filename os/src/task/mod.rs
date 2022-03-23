@@ -19,6 +19,7 @@ pub use manager::add_task;
 pub use processor::{
     current_hartid, current_process, current_processor, current_task, current_trap_cx,
     current_trap_cx_user_va, current_user_token, init_hart, run_tasks, schedule, take_current_task,
+    current_kstack_top
 };
 pub use task::{TaskControlBlock, TaskStatus};
 
@@ -26,7 +27,10 @@ pub fn suspend_current_and_run_next() {
     // There must be an application running.
     let task = match take_current_task() {
         Some(task) => task,
-        None => return,
+        None => { 
+            println!("No Task");
+            return; 
+        },
     };
     // ---- access current TCB exclusively
     let mut task_inner = task.inner_lock_access();
@@ -38,6 +42,7 @@ pub fn suspend_current_and_run_next() {
 
     // push back to ready queue.
     add_task(task);
+    
     // jump to scheduling cycle
     schedule(task_cx_ptr);
 }

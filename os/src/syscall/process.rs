@@ -89,10 +89,10 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
                 .children
                 .iter()
                 .enumerate()
-                .find(|(_, p)| match p.try_inner_exclusive_access() {
-                    Ok(proc) => proc.is_zombie && (pid == -1 || pid as usize == p.getpid()),
-                    Err(_) => false,
-                })
+                .find(
+                |(_, p)| 
+                p.inner_exclusive_access().is_zombie && (pid == -1 || pid as usize == p.getpid()
+            ))
         {
             let child = inner.children.remove(idx);
             assert_eq!(Arc::strong_count(&child), 1);

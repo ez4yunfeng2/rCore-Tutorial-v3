@@ -25,7 +25,7 @@ impl TaskManager {
 }
 
 lazy_static! {
-    static ref TASK_MANAGER: SpinMutex<TaskManager> = SpinMutex::new(TaskManager::new());
+    pub static ref TASK_MANAGER: SpinMutex<TaskManager> = SpinMutex::new(TaskManager::new());
 }
 
 pub fn add_task(task: Arc<TaskControlBlock>) {

@@ -2,7 +2,7 @@ use core::cmp::Ordering;
 
 use crate::config::CLOCK_FREQ;
 use crate::sbi::set_timer;
-use crate::sync::UPSafeCell;
+use crate::sync::{UPSafeCell, SpinMutex};
 use crate::task::{add_task, TaskControlBlock};
 use alloc::collections::BinaryHeap;
 use alloc::sync::Arc;
@@ -58,18 +58,18 @@ impl Ord for TimerCondVar {
 }
 
 lazy_static! {
-    static ref TIMERS: UPSafeCell<BinaryHeap<TimerCondVar>> =
-        unsafe { UPSafeCell::new(BinaryHeap::<TimerCondVar>::new()) };
+    static ref TIMERS: SpinMutex<BinaryHeap<TimerCondVar>> =
+        SpinMutex::new(BinaryHeap::<TimerCondVar>::new());
 }
 
 pub fn add_timer(expire_ms: usize, task: Arc<TaskControlBlock>) {
-    let mut timers = TIMERS.exclusive_access();
+    let mut timers = TIMERS.lock();
     timers.push(TimerCondVar { expire_ms, task });
 }
 
 pub fn check_timer() {
     let current_ms = get_time_ms();
-    let mut timers = TIMERS.exclusive_access();
+    let mut timers = TIMERS.lock();
     while let Some(timer) = timers.peek() {
         if timer.expire_ms <= current_ms {
             add_task(Arc::clone(&timer.task));

@@ -1,11 +1,13 @@
 use super::ProcessControlBlock;
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
 use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE};
-use crate::sync::UPSafeCell;
+use crate::sync::{UPSafeCell, SpinMutex};
+use crate::task::current_hartid;
 use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
+use k210_hal::cache::Uncache;
 use lazy_static::*;
 
 pub struct RecycleAllocator {
@@ -29,6 +31,7 @@ impl RecycleAllocator {
         }
     }
     pub fn dealloc(&mut self, id: usize) {
+        println!("{}",id);
         assert!(id < self.current);
         assert!(
             self.recycled.iter().find(|i| **i == id).is_none(),
@@ -40,21 +43,21 @@ impl RecycleAllocator {
 }
 
 lazy_static! {
-    static ref PID_ALLOCATOR: UPSafeCell<RecycleAllocator> =
-        unsafe { UPSafeCell::new(RecycleAllocator::new()) };
-    static ref KSTACK_ALLOCATOR: UPSafeCell<RecycleAllocator> =
-        unsafe { UPSafeCell::new(RecycleAllocator::new()) };
+    static ref PID_ALLOCATOR: SpinMutex<RecycleAllocator> =
+        SpinMutex::new(RecycleAllocator::new());
+    static ref KSTACK_ALLOCATOR: SpinMutex<RecycleAllocator> =
+        SpinMutex::new(RecycleAllocator::new());
 }
 
 pub struct PidHandle(pub usize);
 
 pub fn pid_alloc() -> PidHandle {
-    PidHandle(PID_ALLOCATOR.inner.borrow_mut().alloc())
+    PidHandle(PID_ALLOCATOR.lock().alloc())
 }
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        PID_ALLOCATOR.inner.borrow_mut().dealloc(self.0);
+        PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
 
@@ -68,9 +71,9 @@ pub fn kernel_stack_position(kstack_id: usize) -> (usize, usize) {
 pub struct KernelStack(pub usize);
 
 pub fn kstack_alloc() -> KernelStack {
-    let kstack_id = KSTACK_ALLOCATOR.inner.borrow_mut().alloc();
+    let kstack_id = KSTACK_ALLOCATOR.lock().alloc();
     let (kstack_bottom, kstack_top) = kernel_stack_position(kstack_id);
-    KERNEL_SPACE.inner.borrow_mut().insert_framed_area(
+    KERNEL_SPACE.lock().insert_framed_area(
         kstack_bottom.into(),
         kstack_top.into(),
         MapPermission::R | MapPermission::W,
@@ -83,8 +86,7 @@ impl Drop for KernelStack {
         let (kernel_stack_bottom, _) = kernel_stack_position(self.0);
         let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
         KERNEL_SPACE
-            .inner
-            .borrow_mut()
+            .lock()
             .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
 }
@@ -220,7 +222,6 @@ impl TaskUserRes {
     }
 
     pub fn brk(&mut self, offset: usize) -> usize {
-        println!("brk_addr: {:#x} {:#x}", self.brk_addr, self.ustack_base);
         match offset {
             0 => self.brk_addr,
             _ => {
@@ -233,6 +234,7 @@ impl TaskUserRes {
 
 impl Drop for TaskUserRes {
     fn drop(&mut self) {
+        println!("dealloc {:#x} {}",self.process.upgrade().unwrap().getpid(), current_hartid());
         self.dealloc_tid();
         self.dealloc_user_res();
     }

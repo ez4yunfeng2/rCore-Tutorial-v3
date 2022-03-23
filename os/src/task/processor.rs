@@ -1,11 +1,13 @@
-use super::__switch;
+use super::manager::TASK_MANAGER;
+use super::{__switch, manager};
 use super::{fetch_task, TaskStatus};
 use super::{ProcessControlBlock, TaskContext, TaskControlBlock};
 use crate::config::MAX_HARTID;
-use crate::sync::intr_on;
+use crate::sync::{intr_on, intr_off};
 use crate::trap::TrapContext;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use riscv::register::sstatus;
 
 pub static mut PROCESSORS: BTreeMap<usize, Processor> = BTreeMap::new();
 
@@ -64,21 +66,17 @@ pub fn run_tasks(hartid: usize) {
         let mut processor = current_processor().unwrap();
         intr_on();
         if let Some(task) = fetch_task() {
-            let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-            // access coming task TCB exclusively
+            intr_off();
             let mut task_inner = task.inner_lock_access();
+            let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
             drop(task_inner);
-            // release coming task TCB manually
             processor.current = Some(task);
-            // release processor manually
-            drop(processor);
+            assert_eq!(sstatus::read().sie(), false);
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
-        } else {
-            println!("no tasks available in run_tasks hartid {}", hartid);
         }
     }
 }
@@ -98,7 +96,11 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 }
 
 pub fn current_process() -> Arc<ProcessControlBlock> {
-    current_task().unwrap().process.upgrade().unwrap()
+    current_task()
+        .unwrap()
+        .process
+        .upgrade()
+        .unwrap()
 }
 
 pub fn current_user_token() -> usize {
@@ -121,8 +123,15 @@ pub fn current_trap_cx_user_va() -> usize {
         .trap_cx_user_va()
 }
 
+pub fn current_kstack_top() -> usize {
+    current_task()
+        .unwrap()
+        .kstack
+        .get_top()
+}
+
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    // assert_eq!(sstatus::read().sie(),false);
+    intr_off();
     let processor = current_processor().unwrap();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(processor);

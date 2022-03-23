@@ -21,8 +21,8 @@ pub fn init() {
     heap_allocator::init_heap();
     task::init_hart();
     frame_allocator::init_frame_allocator();
-    KERNEL_SPACE.inner.borrow_mut().activate();
+    KERNEL_SPACE.lock().activate();
 }
 pub fn activate() {
-    KERNEL_SPACE.inner.borrow_mut().activate();
+    KERNEL_SPACE.lock().activate();
 }

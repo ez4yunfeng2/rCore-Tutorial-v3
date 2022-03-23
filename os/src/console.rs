@@ -25,7 +25,9 @@ impl Write for Stdout {
 }
 
 pub fn print(args: fmt::Arguments) {
-    STDOUT.lock().write_fmt(args).unwrap();
+    let mut stdout = STDOUT.lock();
+    stdout.write_fmt(args).unwrap();
+    // STDOUT.lock().write_fmt(args).unwrap();
     // STDOUT.exclusive_access().write_fmt(args).unwrap()
 }
 

@@ -6,10 +6,12 @@ use crate::sync::{intr_off, intr_on};
 use crate::syscall::syscall;
 use crate::task::{
     current_trap_cx, current_trap_cx_user_va, current_user_token, exit_current_and_run_next,
-    suspend_current_and_run_next,
+    suspend_current_and_run_next, current_hartid,
 };
-use crate::timer::{check_timer, set_next_trigger};
+use crate::timer::{check_timer, set_next_trigger, get_time_usec, get_time};
 pub use context::TrapContext;
+use log::info;
+use riscv::register::sepc;
 use riscv::register::sstatus::{self, SPP};
 use riscv::register::{
     mtvec::TrapMode,
@@ -46,16 +48,18 @@ pub fn enable_timer_interrupt() {
 
 #[no_mangle]
 pub fn trap_handler() -> ! {
-    assert_eq!(sstatus::read().spp(), SPP::User);
+    debug_assert_eq!(sstatus::read().sie(), false, "Trap sie enabled");
+    debug_assert_eq!(sstatus::read().spp(), SPP::User, "Trop from kernel");
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
+
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
-            intr_on();
+            // intr_on();
             // get system call return value
             let result = syscall(
                 cx.x[17],
@@ -86,18 +90,20 @@ pub fn trap_handler() -> ! {
             exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            println!("From U SupervisorTimer");
             set_next_trigger();
-            check_timer();
+            if current_hartid() == 0 {
+                check_timer();
+            }
             suspend_current_and_run_next();
         }
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
+            info!("SupervisorSoft");
             handler_ext();
             sbi_smext_stimer();
         }
         _ => {
             panic!(
-                "Unsupported trap {:?}, stval = {:#x}!",
+                "Unsupported U trap {:?}, stval = {:#x}!",
                 scause.cause(),
                 stval
             );
@@ -132,21 +138,31 @@ pub fn trap_return() -> ! {
 #[no_mangle]
 pub fn trap_from_kernel() {
     assert_eq!(sstatus::read().spp(), SPP::Supervisor);
+    debug_assert_eq!(sstatus::read().sie(), false, "Trap_from_kernel sie enabled");
     let scause = scause::read();
+    let stval = stval::read();
+    let sepc = sepc::read();
     match scause.cause() {
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
             handler_ext();
             sbi_smext_stimer();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            println!("From S SupervisorTimer");
             set_next_trigger();
-            check_timer();
-            suspend_current_and_run_next();
+            if current_hartid() == 0 {
+                check_timer();
+            }
+            // suspend_current_and_run_next();
         }
         Trap::Interrupt(_) => todo!(),
-        Trap::Exception(e) => {
-            panic!("{:?}", e);
+        Trap::Exception(_) => {
+            panic!(
+                "Unsupported S trap {:?}, stval = {:#x}, sepc = {:#x}, {:#x}",
+                scause.cause(),
+                stval,
+                sepc,
+                unsafe{ *(stval as *const u64) }
+            );
         }
     }
 }

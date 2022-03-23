@@ -18,6 +18,7 @@ impl File for Stdin {
         false
     }
     fn read(&self, mut user_buf: UserBuffer) -> usize {
+        // println!("Read Char");
         assert_eq!(user_buf.len(), 1);
         let mut ch;
         loop {
@@ -26,11 +27,17 @@ impl File for Stdin {
                     ch = c;
                     break;
                 }
-                None => wait_for_irq_and_run_next(Interrupt::UARTHS as usize),
+                None =>  wait_for_irq_and_run_next(Interrupt::UARTHS as usize),
             };
         }
+        // loop {
+        //     ch = console_getchar();
+        //     if ch != 0 {
+        //         break;
+        //     }
+        // }
         unsafe {
-            user_buf.buffers[0].as_mut_ptr().write_volatile(ch);
+            user_buf.buffers[0].as_mut_ptr().write_volatile((ch & 0xff) as u8);
         }
         1
     }
