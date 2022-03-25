@@ -19,7 +19,7 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     let new_task_inner = new_task.inner_lock_access();
     let new_task_res = new_task_inner.res.as_ref().unwrap();
     let new_task_tid = new_task_res.tid;
-    let mut process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.try_inner_exclusive_access().unwrap();
     // add new thread to current process
     let tasks = &mut process_inner.tasks;
     while tasks.len() < new_task_tid + 1 {
@@ -55,7 +55,7 @@ pub fn sys_waittid(tid: usize) -> i32 {
     let task = current_task().unwrap();
     let process = task.process.upgrade().unwrap();
     let task_inner = task.inner_lock_access();
-    let mut process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.try_inner_exclusive_access().unwrap();
     // a thread cannot wait for itself
     if task_inner.res.as_ref().unwrap().tid == tid {
         return -1;

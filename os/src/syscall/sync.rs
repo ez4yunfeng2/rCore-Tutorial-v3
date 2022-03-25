@@ -13,7 +13,7 @@ pub fn sys_sleep(ms: usize) -> isize {
 
 pub fn sys_mutex_create(blocking: bool) -> isize {
     let process = current_process();
-    let mut process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.try_inner_exclusive_access().unwrap();
     if let Some(id) = process_inner
         .mutex_list
         .iter()
@@ -37,7 +37,7 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
 
 pub fn sys_mutex_lock(mutex_id: usize) -> isize {
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let process_inner = process.try_inner_exclusive_access().unwrap();
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
     drop(process);
@@ -47,7 +47,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
 
 pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let process_inner = process.try_inner_exclusive_access().unwrap();
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
     drop(process);
@@ -57,7 +57,7 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
 
 pub fn sys_semaphore_creare(res_count: usize) -> isize {
     let process = current_process();
-    let mut process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.try_inner_exclusive_access().unwrap();
     let id = if let Some(id) = process_inner
         .semaphore_list
         .iter()
@@ -78,7 +78,7 @@ pub fn sys_semaphore_creare(res_count: usize) -> isize {
 
 pub fn sys_semaphore_up(sem_id: usize) -> isize {
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let process_inner = process.try_inner_exclusive_access().unwrap();
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.up();
@@ -87,7 +87,7 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
 
 pub fn sys_semaphore_down(sem_id: usize) -> isize {
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let process_inner = process.try_inner_exclusive_access().unwrap();
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.down();

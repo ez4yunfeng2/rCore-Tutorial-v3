@@ -3,7 +3,7 @@ use super::{__switch, manager};
 use super::{fetch_task, TaskStatus};
 use super::{ProcessControlBlock, TaskContext, TaskControlBlock};
 use crate::config::MAX_HARTID;
-use crate::sync::{intr_on, intr_off};
+use crate::sync::{intr_off, intr_on};
 use crate::trap::TrapContext;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -66,7 +66,6 @@ pub fn run_tasks(hartid: usize) {
         let mut processor = current_processor().unwrap();
         intr_on();
         if let Some(task) = fetch_task() {
-            intr_off();
             let mut task_inner = task.inner_lock_access();
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
@@ -96,11 +95,7 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 }
 
 pub fn current_process() -> Arc<ProcessControlBlock> {
-    current_task()
-        .unwrap()
-        .process
-        .upgrade()
-        .unwrap()
+    current_task().unwrap().process.upgrade().unwrap()
 }
 
 pub fn current_user_token() -> usize {
@@ -124,10 +119,15 @@ pub fn current_trap_cx_user_va() -> usize {
 }
 
 pub fn current_kstack_top() -> usize {
-    current_task()
-        .unwrap()
-        .kstack
-        .get_top()
+    current_task().unwrap().kstack.get_top()
+}
+
+pub fn enter_kernel() {
+    current_task().unwrap().inner_lock_access().enter_kernel();
+}
+
+pub fn exit_kernel() {
+    current_task().unwrap().inner_lock_access().exit_kernel();
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {

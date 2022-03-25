@@ -1,7 +1,7 @@
 use super::ProcessControlBlock;
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
 use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE};
-use crate::sync::{UPSafeCell, SpinMutex};
+use crate::sync::{SpinMutex, UPSafeCell};
 use crate::task::current_hartid;
 use alloc::{
     sync::{Arc, Weak},
@@ -9,6 +9,7 @@ use alloc::{
 };
 use k210_hal::cache::Uncache;
 use lazy_static::*;
+use log::trace;
 
 pub struct RecycleAllocator {
     current: usize,
@@ -31,7 +32,6 @@ impl RecycleAllocator {
         }
     }
     pub fn dealloc(&mut self, id: usize) {
-        println!("{}",id);
         assert!(id < self.current);
         assert!(
             self.recycled.iter().find(|i| **i == id).is_none(),
@@ -43,8 +43,7 @@ impl RecycleAllocator {
 }
 
 lazy_static! {
-    static ref PID_ALLOCATOR: SpinMutex<RecycleAllocator> =
-        SpinMutex::new(RecycleAllocator::new());
+    static ref PID_ALLOCATOR: SpinMutex<RecycleAllocator> = SpinMutex::new(RecycleAllocator::new());
     static ref KSTACK_ALLOCATOR: SpinMutex<RecycleAllocator> =
         SpinMutex::new(RecycleAllocator::new());
 }
@@ -52,11 +51,16 @@ lazy_static! {
 pub struct PidHandle(pub usize);
 
 pub fn pid_alloc() -> PidHandle {
-    PidHandle(PID_ALLOCATOR.lock().alloc())
+    // PidHandle(PID_ALLOCATOR.lock().alloc())
+    let mut pid = PID_ALLOCATOR.lock();
+    let pid = pid.alloc();
+    println!("[pid] {}",pid);
+    PidHandle(pid)
 }
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
+        println!("[dpid] {}",self.0);
         PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
@@ -131,7 +135,7 @@ impl TaskUserRes {
         ustack_base: usize,
         alloc_user_res: bool,
     ) -> Self {
-        let tid = process.inner_exclusive_access().alloc_tid();
+        let tid = process.try_inner_exclusive_access().unwrap().alloc_tid();
 
         let task_user_res = Self {
             tid,
@@ -146,11 +150,13 @@ impl TaskUserRes {
     }
 
     pub fn alloc_user_res(&self) {
+        
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.inner_exclusive_access();
+        let mut process_inner = process.try_inner_exclusive_access().unwrap();
         // alloc user stack
         let ustack_bottom = ustack_bottom_from_tid(self.ustack_base, self.tid);
-        let ustack_top = ustack_bottom + USER_STACK_SIZE;
+        let ustack_top = ustack_bottom + USER_STACK_SIZE + 1;
+        trace!("ustack top: {:#x}",ustack_top);
         process_inner.memory_set.insert_framed_area(
             ustack_bottom.into(),
             ustack_top.into(),
@@ -167,9 +173,10 @@ impl TaskUserRes {
     }
 
     fn dealloc_user_res(&self) {
+        
         // dealloc tid
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.inner_exclusive_access();
+        let mut process_inner = process.try_inner_exclusive_access().unwrap();
         // dealloc ustack manually
         let ustack_bottom_va: VirtAddr = ustack_bottom_from_tid(self.ustack_base, self.tid).into();
         process_inner
@@ -184,17 +191,19 @@ impl TaskUserRes {
 
     #[allow(unused)]
     pub fn alloc_tid(&mut self) {
+        
         self.tid = self
             .process
             .upgrade()
             .unwrap()
-            .inner_exclusive_access()
+            .try_inner_exclusive_access().unwrap()
             .alloc_tid();
     }
 
     pub fn dealloc_tid(&self) {
+        
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.inner_exclusive_access();
+        let mut process_inner = process.try_inner_exclusive_access().unwrap();
         process_inner.dealloc_tid(self.tid);
     }
 
@@ -204,7 +213,7 @@ impl TaskUserRes {
 
     pub fn trap_cx_ppn(&self) -> PhysPageNum {
         let process = self.process.upgrade().unwrap();
-        let process_inner = process.inner_exclusive_access();
+        let process_inner = process.try_inner_exclusive_access().unwrap();
         let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_tid(self.tid).into();
         process_inner
             .memory_set
@@ -234,7 +243,11 @@ impl TaskUserRes {
 
 impl Drop for TaskUserRes {
     fn drop(&mut self) {
-        println!("dealloc {:#x} {}",self.process.upgrade().unwrap().getpid(), current_hartid());
+        println!(
+            "dealloc {:#x} {}",
+            self.process.upgrade().unwrap().getpid(),
+            current_hartid()
+        );
         self.dealloc_tid();
         self.dealloc_user_res();
     }

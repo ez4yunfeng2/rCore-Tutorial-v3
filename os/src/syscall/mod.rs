@@ -16,6 +16,7 @@ const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_SLEEP: usize = 101;
 const SYSCALL_YIELD: usize = 124;
+const SYSCALL_TIMES: usize = 153;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
@@ -48,7 +49,10 @@ use process::*;
 use sync::*;
 use thread::*;
 
-use crate::fs::{Dirent, Kstat};
+use crate::{
+    fs::{Dirent, Kstat},
+    task::Tms,
+};
 
 use self::osinfo::TimeVal;
 
@@ -72,6 +76,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_SLEEP => sys_sleep(args[0]),
         SYSCALL_YIELD => sys_yield(),
+        SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
         SYSCALL_UNAME => sys_uname(args[0] as *mut Utsname),
         SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),

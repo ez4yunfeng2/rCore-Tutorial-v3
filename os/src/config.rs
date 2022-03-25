@@ -54,3 +54,9 @@ pub const MMIO: &[(usize, usize)] = &[
     (0x0250_0000, 0x1000), /* UART 0-3 */
     (0x0402_0000, 0x3000), /* SMHC 0-3 */
 ];
+
+macro_rules! intr_check {
+    () => {
+        debug_assert_eq!(sstatus::read().sie(), false, "sie enable")
+    };
+}

@@ -11,14 +11,19 @@
 use core::sync::atomic::{fence, Ordering};
 
 use k210_pac::dmac::channel::status;
-use riscv::register::{sstatus, sie};
+use riscv::register::{sie, sstatus};
 
-use crate::{drivers::BLOCK_DEVICE, sbi::{send_ipi, sbi_smext_stimer}, sync::{intr_on, intr_off}};
+use crate::{
+    drivers::BLOCK_DEVICE,
+    sbi::{sbi_smext_stimer, send_ipi},
+    sync::{intr_off, intr_on},
+};
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
 mod console;
+#[macro_use]
 mod config;
 mod drivers;
 mod fatfs;
@@ -57,20 +62,20 @@ pub fn rust_main(hartid: usize) -> ! {
         console::logger_init();
         trap::init();
         irq::irq_init(hartid);
-        task::add_initproc();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
+        fatfs::fs_init();
+        task::add_initproc();
         BLOCK_DEVICE.change_mode();
-        send_ipi(1);
+        // send_ipi(1);
     } else {
-        loop {  }
+        loop {}
         // mm::activate();
         // trap::init();
         // irq::irq_init(hartid);
         // trap::enable_timer_interrupt();
         // timer::set_next_trigger();
         // println!("[kernel] Lotus core {} boot", hartid);
-        
     }
     task::run_tasks(hartid);
     panic!("Unreachable in rust_main!");

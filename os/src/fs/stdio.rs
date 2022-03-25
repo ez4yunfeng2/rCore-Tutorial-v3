@@ -27,7 +27,7 @@ impl File for Stdin {
                     ch = c;
                     break;
                 }
-                None =>  wait_for_irq_and_run_next(Interrupt::UARTHS as usize),
+                None => wait_for_irq_and_run_next(Interrupt::UARTHS as usize),
             };
         }
         // loop {
@@ -37,7 +37,9 @@ impl File for Stdin {
         //     }
         // }
         unsafe {
-            user_buf.buffers[0].as_mut_ptr().write_volatile((ch & 0xff) as u8);
+            user_buf.buffers[0]
+                .as_mut_ptr()
+                .write_volatile((ch & 0xff) as u8);
         }
         1
     }

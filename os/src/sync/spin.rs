@@ -1,4 +1,4 @@
-use core::sync::atomic::{compiler_fence, fence, AtomicI8, AtomicUsize, AtomicIsize};
+use core::sync::atomic::{compiler_fence, fence, AtomicI8, AtomicIsize, AtomicUsize};
 #[allow(unused)]
 use core::{
     cell::UnsafeCell,
@@ -8,7 +8,7 @@ use core::{
 
 use riscv::register::sstatus;
 
-use crate::task::{current_processor, current_hartid};
+use crate::task::{current_hartid, current_processor};
 
 pub struct SpinMutex<T: ?Sized> {
     pub(crate) lock: AtomicBool,
@@ -23,7 +23,6 @@ pub struct SpinMutexGuard<'a, T: ?Sized + 'a> {
     cpu: &'a AtomicIsize,
     data: &'a mut T,
 }
-
 
 impl<T> SpinMutex<T> {
     #[inline(always)]
@@ -43,7 +42,8 @@ impl<T: ?Sized> SpinMutex<T> {
     }
 
     pub fn holding(&self) -> bool {
-        self.lock.load(Ordering::Relaxed) && self.cpu.load(Ordering::Relaxed) == current_hartid() as isize
+        self.lock.load(Ordering::Relaxed)
+            && self.cpu.load(Ordering::Relaxed) == current_hartid() as isize
     }
 
     #[inline(always)]
@@ -69,7 +69,6 @@ impl<T: ?Sized> SpinMutex<T> {
             data: unsafe { &mut *self.data.get() },
         }
     }
-
 }
 
 impl<T> From<T> for SpinMutex<T> {
@@ -77,7 +76,6 @@ impl<T> From<T> for SpinMutex<T> {
         Self::new(data)
     }
 }
-
 
 impl<'a, T: ?Sized> Deref for SpinMutexGuard<'a, T> {
     type Target = T;
@@ -104,9 +102,10 @@ impl<'a, T: ?Sized> Drop for SpinMutexGuard<'a, T> {
     }
 }
 
-impl <'a, T: ?Sized> SpinMutexGuard<'a, T> {
+impl<'a, T: ?Sized> SpinMutexGuard<'a, T> {
     pub fn holding(&self) -> bool {
-        self.lock.load(Ordering::Relaxed) && self.cpu.load(Ordering::Relaxed) == current_hartid() as isize
+        self.lock.load(Ordering::Relaxed)
+            && self.cpu.load(Ordering::Relaxed) == current_hartid() as isize
     }
 }
 

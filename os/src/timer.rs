@@ -2,7 +2,7 @@ use core::cmp::Ordering;
 
 use crate::config::CLOCK_FREQ;
 use crate::sbi::set_timer;
-use crate::sync::{UPSafeCell, SpinMutex};
+use crate::sync::{SpinMutex, UPSafeCell};
 use crate::task::{add_task, TaskControlBlock};
 use alloc::collections::BinaryHeap;
 use alloc::sync::Arc;

@@ -1,13 +1,16 @@
 use crate::{
-    drivers::{BLOCK_DEVICE, UART_DEVICE, PLIC_DRIVE, PlicDevice},
-    sync::{SpinMutex, UPSafeCell},
-    task::{add_task, schedule, take_current_task, TaskContext, TaskControlBlock, TaskStatus, current_hartid},
+    drivers::{PlicDevice, BLOCK_DEVICE, PLIC_DRIVE, UART_DEVICE},
+    sync::{SpinMutex, UPSafeCell, intr_on},
+    task::{
+        add_task, current_hartid, schedule, take_current_task, TaskContext, TaskControlBlock,
+        TaskStatus,
+    },
 };
 use alloc::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
-use k210_pac::Interrupt;
+use k210_pac::{Interrupt, dmac::channel::ctl::SINC_R};
 use k210_soc::{
     dmac::channel_interrupt_clear,
     plic::{clear_irq, current_irq, plic_enable, set_priority, set_thershold},
@@ -22,15 +25,15 @@ lazy_static! {
 }
 
 pub struct IrqManager {
-    plic_instance: Arc<dyn PlicDevice>, 
+    plic_instance: Arc<dyn PlicDevice>,
     task_list: BTreeMap<usize, VecDeque<Arc<TaskControlBlock>>>,
 }
 
 impl IrqManager {
     pub fn new() -> Self {
-        Self { 
+        Self {
             plic_instance: PLIC_DRIVE.clone(),
-            task_list: BTreeMap::new()
+            task_list: BTreeMap::new(),
         }
     }
 
@@ -52,7 +55,7 @@ impl IrqManager {
         }
     }
 
-    pub fn set_thershold(&mut self,value: u32, hartid: usize) {
+    pub fn set_thershold(&mut self, value: u32, hartid: usize) {
         self.plic_instance.set_thershold(value, hartid)
     }
 
@@ -73,6 +76,7 @@ pub fn irq_init(hartid: usize) {
 
 #[no_mangle]
 pub fn wait_for_irq_and_run_next(irq: usize) {
+    intr_check!();
     let mut irq_manager = IRQMANAGER.lock();
     if let Some(task) = take_current_task() {
         let mut task_inner = task.inner_lock_access();
@@ -83,30 +87,34 @@ pub fn wait_for_irq_and_run_next(irq: usize) {
         drop(irq_manager);
         schedule(task_cx_ptr);
     } else {
-        panic!("Too eaily irq {}", irq)
+        panic!("too early irq");
     }
 }
 
 pub fn handler_ext() {
-    assert_eq!(sstatus::read().sie(), false);
+    intr_check!();
     let mut irq_manager = IRQMANAGER.lock();
     let irq = PLIC_DRIVE.current(current_hartid());
     match irq {
-        0 => { println!("irq 0 hart {}", current_hartid()) }
+        0 => {
+            println!("irq 0 hart {}", current_hartid())
+        }
         27 => {
             BLOCK_DEVICE.handler_interrupt();
-            let task = irq_manager.dequeue(irq).unwrap();
-            add_task(task);
+            match irq_manager.dequeue(irq) {
+                Some(task) => add_task(task),
+                None => { },
+            }
         }
         33 => {
             UART_DEVICE.handler_interrupt();
             match irq_manager.dequeue(irq) {
                 Some(task) => add_task(task),
-                None => {  }
+                None => {}
             }
         }
         _ => {
-            panic!("Unsupported irq {}",irq)
+            panic!("Unsupported irq {}", irq)
         }
     }
     if irq != 0 {

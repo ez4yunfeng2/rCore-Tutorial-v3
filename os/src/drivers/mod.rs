@@ -1,6 +1,6 @@
 mod block;
-mod uart;
 mod plic;
+mod uart;
 use core::any::Any;
 use k210_pac::Interrupt;
 
@@ -21,7 +21,7 @@ pub trait UartDevice: Send + Sync + Any {
 }
 
 pub trait PlicDevice: Send + Sync + Any {
-    fn enable(&self,source: Interrupt, hartid: usize);
+    fn enable(&self, source: Interrupt, hartid: usize);
     fn current(&self, hartid: usize) -> usize;
     fn clear(&self, irq: usize, hartid: usize);
     fn set_priority(&self, value: u32, pin: Interrupt);

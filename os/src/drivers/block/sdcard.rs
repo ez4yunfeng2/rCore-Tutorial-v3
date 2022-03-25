@@ -852,6 +852,7 @@ impl SDCardWrapper {
 
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
+        intr_check!();
         match *self.irq.exclusive_access() {
             true => self
                 .driver

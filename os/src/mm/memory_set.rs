@@ -3,7 +3,7 @@ use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE};
-use crate::sync::{UPSafeCell, SpinMutex};
+use crate::sync::{SpinMutex, UPSafeCell};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -199,22 +199,56 @@ impl MemorySet {
                 );
             }
         }
+        
 
-        let map_perm = MapPermission::R | MapPermission::W | MapPermission::U;
+        // alloc heap
         let start_va: VirtAddr = max_end_vpn.into();
         let end_va: VirtAddr = (start_va.0 + 2 * PAGE_SIZE).into();
+
+        let map_perm = MapPermission::R | MapPermission::W | MapPermission::U;  
         let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
         memory_set.push(map_area, None);
 
         let max_end_va: VirtAddr = max_end_vpn.into();
         let mut user_stack_base: usize = max_end_va.into();
         user_stack_base += 2 * PAGE_SIZE;
+
+        println!("ustack {:#x}",user_stack_base);
         (
             memory_set,
             user_stack_base,
             elf.header.pt2.entry_point() as usize,
         )
     }
+    #[allow(unused)]
+    pub fn from_bin(bin_data: &[u8]) -> (Self, usize, usize) {
+        let mut memory_set = Self::new_bare();
+        let start_va:VirtAddr = 0x10000usize.into();
+        let end_va: VirtAddr = (0x10000 + bin_data.len()).into();
+        println!("{:?} -> {:?}",start_va, end_va);
+        let map_perm = MapPermission::U | MapPermission::R | MapPermission::W | MapPermission::X;
+        let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
+        let max_end_vpn = map_area.vpn_range.get_end();
+        memory_set.push(map_area, Some(bin_data));
+
+        let start_va: VirtAddr = max_end_vpn.into();
+        let end_va: VirtAddr = (start_va.0 + 2 * PAGE_SIZE).into();
+
+        let map_perm = MapPermission::R | MapPermission::W | MapPermission::U;  
+        let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
+        memory_set.push(map_area, None);
+
+        let max_end_va: VirtAddr = max_end_vpn.into();
+        let mut user_stack_base: usize = max_end_va.into();
+        user_stack_base += 2 * PAGE_SIZE;
+
+        (
+            memory_set,
+            user_stack_base,
+            0x10000,
+        )
+    }
+
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {
         let mut memory_set = Self::new_bare();
         // map trampoline

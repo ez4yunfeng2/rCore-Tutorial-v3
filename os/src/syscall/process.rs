@@ -2,7 +2,7 @@ use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_ref, translated_refmut, translated_str};
 use crate::task::{
     current_process, current_task, current_user_token, exit_current_and_run_next,
-    suspend_current_and_run_next,
+    suspend_current_and_run_next, Tms,
 };
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -32,7 +32,7 @@ pub fn sys_fork() -> isize {
     let new_process = current_process.fork();
     let new_pid = new_process.getpid();
     // modify trap context of new_task, because it returns immediately after switching
-    let new_process_inner = new_process.inner_exclusive_access();
+    let new_process_inner = new_process.try_inner_exclusive_access().unwrap();
     let task = new_process_inner.tasks[0].as_ref().unwrap();
     let trap_cx = task.inner_lock_access().get_trap_cx();
     // we do not have to move to next instruction since we have done it before
@@ -71,7 +71,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.try_inner_exclusive_access().unwrap();
     if inner
         .children
         .iter()
@@ -83,24 +83,23 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     drop(inner);
     loop {
         let process = current_process();
-        let mut inner = process.inner_exclusive_access();
-        if let Some((idx, _)) =
-            inner
-                .children
-                .iter()
-                .enumerate()
-                .find(
-                |(_, p)| 
-                p.inner_exclusive_access().is_zombie && (pid == -1 || pid as usize == p.getpid()
-            ))
-        {
+        let mut inner = process.try_inner_exclusive_access().unwrap();
+        if let Some((idx, _)) = inner.children.iter().enumerate().find(|(_, p)| {
+            // p.try_inner_exclusive_access().unwrap().is_zombie && (pid == -1 || pid as usize == p.getpid())
+            let tmp = p.getpid();
+            match p.try_inner_exclusive_access() {
+                Ok(p) => p.is_zombie && ( pid == -1|| pid as usize == tmp) ,
+                Err(_) => false
+            }
+        }) {
             let child = inner.children.remove(idx);
             assert_eq!(Arc::strong_count(&child), 1);
             let found_pid = child.getpid();
-            let exit_code = child.inner_exclusive_access().exit_code;
+            let exit_code = child.try_inner_exclusive_access().unwrap().exit_code;
             if exit_code_ptr as usize != 0 {
                 *translated_refmut(inner.memory_set.token(), exit_code_ptr) = 3 << 8 | exit_code;
             }
+            println!("[return] {}",found_pid);
             return found_pid as isize;
         }
         drop(inner);
@@ -116,4 +115,13 @@ pub fn sys_brk(addr: usize) -> isize {
     } else {
         -1
     }
+}
+
+pub fn sys_times(tms: *mut Tms) -> isize {
+    let token = current_user_token();
+    let tms = translated_refmut(token, tms);
+    let task = current_task().unwrap();
+    let mut inner = task.inner_lock_access();
+    *tms = *inner.times;
+    1
 }

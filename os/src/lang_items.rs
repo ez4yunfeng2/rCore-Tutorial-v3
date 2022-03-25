@@ -1,6 +1,6 @@
 use crate::sbi::shutdown;
 use crate::sync::intr_off;
-use crate::task::{current_hartid, current_kstack_top};
+use crate::task::{current_hartid, current_kstack_top, current_process};
 use core::panic::PanicInfo;
 
 #[panic_handler]
@@ -9,12 +9,13 @@ fn panic(info: &PanicInfo) -> ! {
     match info.location() {
         Some(location) => {
             println!(
-                "[LotusOS] hartid {} panicked at '{}', {}:{}:{}",
+                "[LotusOS] hartid {} panicked at '{}', {}:{}:{}, {}",
                 current_hartid(),
                 info.message().unwrap(),
                 location.file(),
                 location.line(),
-                location.column()
+                location.column(),
+                current_process().getpid()
             );
         }
         None => println!(
@@ -23,6 +24,9 @@ fn panic(info: &PanicInfo) -> ! {
             info.message().unwrap()
         ),
     };
+    unsafe {
+        backtrace();
+    }
     shutdown()
 }
 

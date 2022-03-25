@@ -12,7 +12,7 @@ use alloc::sync::Arc;
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.try_inner_exclusive_access().unwrap();
     if !inner.fd_table.contains_key(&fd) {
         return -1;
     }
@@ -31,7 +31,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
 pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.try_inner_exclusive_access().unwrap();
     if !inner.fd_table.contains_key(&fd) {
         return -1;
     }
@@ -52,7 +52,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
 pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.try_inner_exclusive_access().unwrap();
     let path = translated_str(token, path).replace("./", "");
     println!("[sys_open]: {}", path);
     let dir = if fd >= 0 {
@@ -65,6 +65,7 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     } else {
         &inner.dir_entry.as_ref().unwrap()
     };
+
     if path == ".".to_string() {
         let tmp = dir.clone();
         drop(dir);
@@ -75,11 +76,13 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     let flag = OpenFlags::from_bits(flags).unwrap();
     let (readable, writable) = flag.read_write();
     let file = if flag.contains(OpenFlags::CREATE) {
+        println!("create");
         dir.create(&path, readable, writable, false)
     } else {
         let directory = flag.contains(OpenFlags::DIRECTORY);
         dir.open(&path, readable, writable, directory)
     };
+    println!("[read Ok]");
     if let Some(file) = file {
         let fd = inner.alloc_fd();
         inner.fd_table.insert(fd, Some(file));
@@ -92,7 +95,7 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
 pub fn sys_unlink(dirfd: isize, path: *const u8, _flags: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.try_inner_exclusive_access().unwrap();
     if dirfd < 0 {
         let path = translated_str(token, path).replace("./", "");
         if inner.dir_entry.as_ref().unwrap().remove(&path) {
@@ -105,7 +108,7 @@ pub fn sys_unlink(dirfd: isize, path: *const u8, _flags: usize) -> isize {
 pub fn sys_mkdir(dirfd: isize, path: *const u8, _mode: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.try_inner_exclusive_access().unwrap();
     let path = translated_str(token, path).replace("./", "");
     let dir = if dirfd >= 0 {
         if let Some(dir) = inner.fd_table.get(&(dirfd as usize)).unwrap() {
@@ -129,7 +132,7 @@ pub fn sys_mkdir(dirfd: isize, path: *const u8, _mode: usize) -> isize {
 pub fn sys_chdir(path: *const u8) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.try_inner_exclusive_access().unwrap();
     let path = translated_str(token, path).replace("./", "");
     let inode = inner
         .dir_entry
@@ -147,7 +150,7 @@ pub fn sys_chdir(path: *const u8) -> isize {
 
 pub fn sys_close(fd: usize) -> isize {
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.try_inner_exclusive_access().unwrap();
     if !inner.fd_table.contains_key(&fd) {
         return -1;
     }
@@ -158,7 +161,7 @@ pub fn sys_close(fd: usize) -> isize {
 pub fn sys_pipe(pipe: *mut i32) -> isize {
     let process = current_process();
     let token = current_user_token();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.try_inner_exclusive_access().unwrap();
     let (pipe_read, pipe_write) = make_pipe();
     let read_fd = inner.alloc_fd();
     inner.fd_table.get_mut(&read_fd).unwrap().replace(pipe_read);
@@ -175,7 +178,7 @@ pub fn sys_pipe(pipe: *mut i32) -> isize {
 
 pub fn sys_dup(fd: usize) -> isize {
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.try_inner_exclusive_access().unwrap();
     if fd >= inner.fd_table.len() {
         return -1;
     }
@@ -190,7 +193,7 @@ pub fn sys_dup(fd: usize) -> isize {
 
 pub fn sys_dup3(old: usize, new: usize) -> isize {
     let process = current_process();
-    let mut inner = process.inner_exclusive_access();
+    let mut inner = process.try_inner_exclusive_access().unwrap();
     if inner.fd_table[&old].is_none() {
         return -1;
     }
@@ -205,7 +208,7 @@ pub fn sys_dup3(old: usize, new: usize) -> isize {
 pub fn sys_getcwd(buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.try_inner_exclusive_access().unwrap();
     let name = inner.dir_entry.as_ref().unwrap().name();
     let dir = name.as_bytes();
     for b in UserBuffer::new(translated_byte_buffer(token, buf, len)).buffers {
@@ -218,7 +221,7 @@ pub fn sys_fstat(fd: isize, ptr: *mut Kstat) -> isize {
     let token = current_user_token();
     let stat = translated_refmut(token, ptr);
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.try_inner_exclusive_access().unwrap();
     if let Some(opt) = inner.fd_table.get(&(fd as usize)) {
         if let Some(file) = opt {
             file.kstat(stat);
@@ -231,7 +234,7 @@ pub fn sys_fstat(fd: isize, ptr: *mut Kstat) -> isize {
 pub fn sys_getdents(fd: isize, ptr: *mut Dirent, _len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.try_inner_exclusive_access().unwrap();
     let dirent = translated_refmut(token, ptr);
     let mut name = translated_str(token, (ptr as usize + 19) as *const u8);
     match inner.fd_table.get(&(fd as usize)) {
@@ -259,7 +262,7 @@ pub fn sys_mmap(
 ) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.inner_exclusive_access();
+    let inner = process.try_inner_exclusive_access().unwrap();
     if let Some(opt) = inner.fd_table.get(&fd) {
         if let Some(file) = opt {
             let start_addr = if start == 0 {

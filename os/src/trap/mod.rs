@@ -5,12 +5,12 @@ use crate::sbi::sbi_smext_stimer;
 use crate::sync::{intr_off, intr_on};
 use crate::syscall::syscall;
 use crate::task::{
-    current_trap_cx, current_trap_cx_user_va, current_user_token, exit_current_and_run_next,
-    suspend_current_and_run_next, current_hartid,
+    current_hartid, current_trap_cx, current_trap_cx_user_va, current_user_token, enter_kernel,
+    exit_current_and_run_next, exit_kernel, suspend_current_and_run_next,
 };
-use crate::timer::{check_timer, set_next_trigger, get_time_usec, get_time};
+use crate::timer::{check_timer, get_time, get_time_usec, set_next_trigger};
 pub use context::TrapContext;
-use log::info;
+use log::{info, trace};
 use riscv::register::sepc;
 use riscv::register::sstatus::{self, SPP};
 use riscv::register::{
@@ -55,7 +55,7 @@ pub fn trap_handler() -> ! {
     let stval = stval::read();
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
-
+            enter_kernel();
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
@@ -97,7 +97,7 @@ pub fn trap_handler() -> ! {
             suspend_current_and_run_next();
         }
         Trap::Interrupt(Interrupt::SupervisorSoft) => {
-            info!("SupervisorSoft");
+            // info!("U SupervisorSoft");
             handler_ext();
             sbi_smext_stimer();
         }
@@ -116,6 +116,7 @@ pub fn trap_handler() -> ! {
 pub fn trap_return() -> ! {
     intr_off();
     set_user_trap_entry();
+    exit_kernel();
     let trap_cx_user_va = current_trap_cx_user_va();
     let user_satp = current_user_token();
     extern "C" {
@@ -123,6 +124,7 @@ pub fn trap_return() -> ! {
         fn __restore();
     }
     let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
+    
     unsafe {
         asm!(
             "fence.i",
@@ -161,7 +163,7 @@ pub fn trap_from_kernel() {
                 scause.cause(),
                 stval,
                 sepc,
-                unsafe{ *(stval as *const u64) }
+                unsafe { *(stval as *const u64) }
             );
         }
     }
