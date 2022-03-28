@@ -99,7 +99,6 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
             if exit_code_ptr as usize != 0 {
                 *translated_refmut(inner.memory_set.token(), exit_code_ptr) = 3 << 8 | exit_code;
             }
-            println!("[return] {}",found_pid);
             return found_pid as isize;
         }
         drop(inner);

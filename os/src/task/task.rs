@@ -31,7 +31,6 @@ impl TaskControlBlock {
             },
             None => println!("None"),
         }
-        panic!("Fuck")
     }
 }
 

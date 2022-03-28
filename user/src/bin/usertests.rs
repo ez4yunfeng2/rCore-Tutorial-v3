@@ -5,12 +5,10 @@
 extern crate user_lib;
 
 static TESTS: &[&str] = &[
-    "open\0",
-    "read\0",
     "brk\0",
-    "wait\0",
-    "waitpid\0",
     "chdir\0",
+    "clone\0",
+    "close\0",
     "dup\0",
     "dup2\0",
     "execve\0",
@@ -25,11 +23,19 @@ static TESTS: &[&str] = &[
     "mkdir\0",
     "mmap\0",
     "munmap\0",
+    "mount\0",
+    "open\0",
+    "openat\0",
     "pipe\0",
+    "read\0",
     "times\0",
+    "umount\0",
     "uname\0",
-    "write\0",
+    "wait\0",
     "yield\0",
+    "write\0",
+    "waitpid\0",
+    "user_shell\0"
 ];
 
 use user_lib::{exec, fork, waitpid};

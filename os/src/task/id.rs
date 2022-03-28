@@ -54,13 +54,11 @@ pub fn pid_alloc() -> PidHandle {
     // PidHandle(PID_ALLOCATOR.lock().alloc())
     let mut pid = PID_ALLOCATOR.lock();
     let pid = pid.alloc();
-    println!("[pid] {}",pid);
     PidHandle(pid)
 }
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        println!("[dpid] {}",self.0);
         PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
@@ -243,11 +241,6 @@ impl TaskUserRes {
 
 impl Drop for TaskUserRes {
     fn drop(&mut self) {
-        println!(
-            "dealloc {:#x} {}",
-            self.process.upgrade().unwrap().getpid(),
-            current_hartid()
-        );
         self.dealloc_tid();
         self.dealloc_user_res();
     }

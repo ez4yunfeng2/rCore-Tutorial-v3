@@ -76,13 +76,11 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     let flag = OpenFlags::from_bits(flags).unwrap();
     let (readable, writable) = flag.read_write();
     let file = if flag.contains(OpenFlags::CREATE) {
-        println!("create");
         dir.create(&path, readable, writable, false)
     } else {
         let directory = flag.contains(OpenFlags::DIRECTORY);
         dir.open(&path, readable, writable, directory)
     };
-    println!("[read Ok]");
     if let Some(file) = file {
         let fd = inner.alloc_fd();
         inner.fd_table.insert(fd, Some(file));

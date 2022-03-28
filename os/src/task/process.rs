@@ -74,19 +74,6 @@ impl ProcessControlBlock {
         self.inner.try_exclusive_access()
     }
 
-    // pub fn try_inner_exclusive_access(
-    //     &self,
-    // ) -> Option<SpinMutexGuard<ProcessControlBlockInner>> {
-    //     self.inner.try_lock()
-    // }
-
-    // pub fn inner_exclusive_access(&self) -> SpinMutexGuard<ProcessControlBlockInner> {
-    //     println!("inner");
-    //     let a = self.inner.lock();
-    //     println!("Ok");
-    //     a
-    // }
-
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         
         // memory_set with elf program headers/trampoline/trap context/user stack
