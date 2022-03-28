@@ -29,7 +29,7 @@ impl TaskControlBlock {
                 let inner = process.try_inner_exclusive_access().unwrap();
                 return inner.memory_set.token()
             },
-            None => println!("None"),
+            None => panic!("None"),
         }
     }
 }

@@ -646,7 +646,7 @@ impl DirEntry {
             if dir.is_dir() {
                 println!("Dir: {}", dir.file_name());
             } else {
-                println!("DirFile: {}", dir.file_name());
+                println!("File: {}", dir.file_name());
             }
         }
     }
