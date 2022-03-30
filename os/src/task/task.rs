@@ -6,6 +6,7 @@ use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
 use core::ops::{Deref, DerefMut};
+use core::ptr::NonNull;
 
 pub struct TaskControlBlock {
     // immutable
@@ -21,16 +22,9 @@ impl TaskControlBlock {
     }
 
     pub fn get_user_token(&self) -> usize {
-        // let process = self.process.upgrade().unwrap();
-        // let inner = process.try_inner_exclusive_access().unwrap();
-        // inner.memory_set.token()
-        match self.process.upgrade() {
-            Some(process) => {
-                let inner = process.try_inner_exclusive_access().unwrap();
-                return inner.memory_set.token()
-            },
-            None => panic!("None"),
-        }
+        let process = self.process.upgrade().unwrap();
+        let inner = process.inner_lock_access();
+        inner.memory_set.token()
     }
 }
 

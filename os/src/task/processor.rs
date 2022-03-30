@@ -72,7 +72,7 @@ pub fn run_tasks(hartid: usize) {
             task_inner.task_status = TaskStatus::Running;
             drop(task_inner);
             processor.current = Some(task);
-            assert_eq!(sstatus::read().sie(), false);
+            intr_check!();
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }

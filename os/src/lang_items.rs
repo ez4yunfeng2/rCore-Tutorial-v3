@@ -9,13 +9,13 @@ fn panic(info: &PanicInfo) -> ! {
     match info.location() {
         Some(location) => {
             println!(
-                "[LotusOS] hartid {} panicked at '{}', {}:{}:{}, {}",
+                "[LotusOS] hartid {} pid {} panicked at '{}', {}:{}:{}",
                 current_hartid(),
+                current_process().getpid(),
                 info.message().unwrap(),
                 location.file(),
                 location.line(),
-                location.column(),
-                current_process().getpid()
+                location.column()
             );
         }
         None => println!(

@@ -17,7 +17,7 @@ pub struct ProcessControlBlock {
     // immutable
     pub pid: PidHandle,
     // mutable
-    pub inner: UPSafeCell<ProcessControlBlockInner>,
+    pub inner: SpinMutex<ProcessControlBlockInner>,
 }
 
 pub struct ProcessControlBlockInner {
@@ -68,14 +68,23 @@ impl ProcessControlBlockInner {
 }
 
 impl ProcessControlBlock {
+    // pub fn try_inner_exclusive_access(
+    //     &self,
+    // ) -> Result<RefMut<ProcessControlBlockInner>, BorrowMutError> {
+    //     self.inner.try_exclusive_access()
+    // }
+
     pub fn try_inner_exclusive_access(
         &self,
-    ) -> Result<RefMut<ProcessControlBlockInner>, BorrowMutError> {
-        self.inner.try_exclusive_access()
+    ) -> Option<SpinMutexGuard<ProcessControlBlockInner>> {
+        self.inner.try_lock()
+    }
+
+    pub fn inner_lock_access(&self) -> SpinMutexGuard<ProcessControlBlockInner>{
+        self.inner.lock()
     }
 
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
-        
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
 
@@ -85,11 +94,10 @@ impl ProcessControlBlock {
         btree.insert(0, Some(Arc::new(Stdin)));
         btree.insert(1, Some(Arc::new(Stdout)));
         btree.insert(2, Some(Arc::new(Stdout)));
-        let process = Arc::new(
-            Self {
+        let process = Arc::new(Self {
             pid: pid_handle,
-            inner: unsafe { 
-                UPSafeCell::new(ProcessControlBlockInner {
+            inner: 
+                SpinMutex::new(ProcessControlBlockInner {
                     is_zombie: false,
                     memory_set,
                     parent: None,
@@ -101,10 +109,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     dir_entry: Some(root()),
-                })
-            },
-            }
-        );
+                }),
+        });
         // create a main thread, we should allocate ustack and trap_cx here
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&process),
@@ -135,7 +141,6 @@ impl ProcessControlBlock {
 
     /// Only support processes with a single thread.
     pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) {
-        
         assert_eq!(self.try_inner_exclusive_access().unwrap().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
@@ -190,8 +195,7 @@ impl ProcessControlBlock {
 
     /// Only support processes with a single thread.
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
-        
-        let mut parent = self.try_inner_exclusive_access().unwrap();
+        let mut parent = self.inner_lock_access();
         assert_eq!(parent.thread_count(), 1);
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
@@ -207,11 +211,9 @@ impl ProcessControlBlock {
             }
         }
         // create child process pcb
-        let child = Arc::new(
-            Self {
+        let child = Arc::new(Self {
             pid,
-            inner:  unsafe { 
-                UPSafeCell::new(ProcessControlBlockInner {
+            inner: SpinMutex::new(ProcessControlBlockInner {
                     is_zombie: false,
                     memory_set,
                     parent: Some(Arc::downgrade(self)),
@@ -223,10 +225,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     dir_entry: parent.dir_entry.clone(),
-                })
-            },
-             }
-        );
+                }),
+        });
         // add child
         parent.children.push(Arc::clone(&child));
         // create main thread of child process
@@ -244,7 +244,7 @@ impl ProcessControlBlock {
             false,
         ));
         // attach task to child process
-        
+
         let mut child_inner = child.try_inner_exclusive_access().unwrap();
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
@@ -263,8 +263,8 @@ impl ProcessControlBlock {
     }
 
     pub fn getppid(&self) -> usize {
-        
-        self.try_inner_exclusive_access().unwrap()
+        self.try_inner_exclusive_access()
+            .unwrap()
             .parent
             .as_ref()
             .unwrap()

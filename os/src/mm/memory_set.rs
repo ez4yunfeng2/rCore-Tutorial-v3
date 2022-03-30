@@ -199,13 +199,12 @@ impl MemorySet {
                 );
             }
         }
-        
 
         // alloc heap
         let start_va: VirtAddr = max_end_vpn.into();
         let end_va: VirtAddr = (start_va.0 + 2 * PAGE_SIZE).into();
 
-        let map_perm = MapPermission::R | MapPermission::W | MapPermission::U;  
+        let map_perm = MapPermission::R | MapPermission::W | MapPermission::U;
         let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
         memory_set.push(map_area, None);
 
@@ -213,7 +212,7 @@ impl MemorySet {
         let mut user_stack_base: usize = max_end_va.into();
         user_stack_base += 2 * PAGE_SIZE;
 
-        println!("ustack {:#x}",user_stack_base);
+        println!("ustack {:#x}", user_stack_base);
         (
             memory_set,
             user_stack_base,
@@ -223,9 +222,9 @@ impl MemorySet {
     #[allow(unused)]
     pub fn from_bin(bin_data: &[u8]) -> (Self, usize, usize) {
         let mut memory_set = Self::new_bare();
-        let start_va:VirtAddr = 0x10000usize.into();
+        let start_va: VirtAddr = 0x10000usize.into();
         let end_va: VirtAddr = (0x10000 + bin_data.len()).into();
-        println!("{:?} -> {:?}",start_va, end_va);
+        println!("{:?} -> {:?}", start_va, end_va);
         let map_perm = MapPermission::U | MapPermission::R | MapPermission::W | MapPermission::X;
         let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
         let max_end_vpn = map_area.vpn_range.get_end();
@@ -234,7 +233,7 @@ impl MemorySet {
         let start_va: VirtAddr = max_end_vpn.into();
         let end_va: VirtAddr = (start_va.0 + 2 * PAGE_SIZE).into();
 
-        let map_perm = MapPermission::R | MapPermission::W | MapPermission::U;  
+        let map_perm = MapPermission::R | MapPermission::W | MapPermission::U;
         let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
         memory_set.push(map_area, None);
 
@@ -242,11 +241,7 @@ impl MemorySet {
         let mut user_stack_base: usize = max_end_va.into();
         user_stack_base += 2 * PAGE_SIZE;
 
-        (
-            memory_set,
-            user_stack_base,
-            0x10000,
-        )
+        (memory_set, user_stack_base, 0x10000)
     }
 
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {

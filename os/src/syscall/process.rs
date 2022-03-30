@@ -1,9 +1,10 @@
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_ref, translated_refmut, translated_str};
 use crate::task::{
-    current_process, current_task, current_user_token, exit_current_and_run_next,
+    current_hartid, current_process, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next, Tms,
 };
+use crate::timer::get_time_ms;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -81,17 +82,19 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         return -1;
     }
     drop(inner);
+    drop(process);
     loop {
+        intr_check!();
         let process = current_process();
-        let mut inner = process.try_inner_exclusive_access().unwrap();
+        let mut inner = process.inner_lock_access();
         if let Some((idx, _)) = inner.children.iter().enumerate().find(|(_, p)| {
-            // p.try_inner_exclusive_access().unwrap().is_zombie && (pid == -1 || pid as usize == p.getpid())
             let tmp = p.getpid();
             match p.try_inner_exclusive_access() {
-                Ok(p) => p.is_zombie && ( pid == -1|| pid as usize == tmp) ,
-                Err(_) => false
+                Some(p) => p.is_zombie && (pid == -1 || pid as usize == tmp),
+                None => false,
             }
         }) {
+            println!("waitpid exit");
             let child = inner.children.remove(idx);
             assert_eq!(Arc::strong_count(&child), 1);
             let found_pid = child.getpid();

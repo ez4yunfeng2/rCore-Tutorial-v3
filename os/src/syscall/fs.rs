@@ -12,7 +12,7 @@ use alloc::sync::Arc;
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.try_inner_exclusive_access().unwrap();
+    let inner = process.inner_lock_access();
     if !inner.fd_table.contains_key(&fd) {
         return -1;
     }
@@ -31,7 +31,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
 pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.try_inner_exclusive_access().unwrap();
+    let inner = process.inner_lock_access();
     if !inner.fd_table.contains_key(&fd) {
         return -1;
     }
@@ -52,7 +52,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
 pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let mut inner = process.try_inner_exclusive_access().unwrap();
+    let mut inner = process.inner_lock_access();
     let path = translated_str(token, path).replace("./", "");
     println!("[sys_open]: {}", path);
     let dir = if fd >= 0 {
@@ -93,7 +93,7 @@ pub fn sys_open(fd: isize, path: *const u8, flags: u32) -> isize {
 pub fn sys_unlink(dirfd: isize, path: *const u8, _flags: usize) -> isize {
     let token = current_user_token();
     let process = current_process();
-    let inner = process.try_inner_exclusive_access().unwrap();
+    let inner = process.inner_lock_access();
     if dirfd < 0 {
         let path = translated_str(token, path).replace("./", "");
         if inner.dir_entry.as_ref().unwrap().remove(&path) {

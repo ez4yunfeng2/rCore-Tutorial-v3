@@ -49,24 +49,45 @@ impl<T: ?Sized> SpinMutex<T> {
     #[inline(always)]
     pub fn lock(&self) -> SpinMutexGuard<T> {
         push_off();
-
         if self.holding() {
             panic!("acquire")
         }
-
+        let mut timeout = 0x0usize;
         while self
             .lock
             .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            while self.is_locked() {}
+            while self.is_locked() {
+                timeout+=1;
+                if timeout >= 0xFFFFFF{
+                    panic!("lock timeout")
+                }
+            }
         }
-        fence(Ordering::Acquire);
         self.cpu.swap(current_hartid() as isize, Ordering::Relaxed);
         SpinMutexGuard {
             lock: &self.lock,
             cpu: &self.cpu,
             data: unsafe { &mut *self.data.get() },
+        }
+    }
+
+    #[inline(always)]
+    pub fn try_lock(&self) -> Option<SpinMutexGuard<T>> {
+        push_off();
+        if self.holding() {
+           panic!("acquire")
+        }
+        if self.lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            self.cpu.swap(current_hartid() as isize, Ordering::Relaxed);
+            Some(SpinMutexGuard {
+                lock: &self.lock,
+                cpu: &self.cpu,
+                data: unsafe { &mut *self.data.get() },
+            })
+        } else {
+            None
         }
     }
 }
@@ -95,9 +116,8 @@ impl<'a, T: ?Sized> Drop for SpinMutexGuard<'a, T> {
         if !self.holding() {
             panic!("release")
         }
-        self.cpu.swap(-1, Ordering::Release);
-        fence(Ordering::Acquire);
-        self.lock.swap(false, Ordering::Release);
+        self.cpu.store(-1, Ordering::Release);
+        self.lock.store(false, Ordering::Release);
         pop_off();
     }
 }

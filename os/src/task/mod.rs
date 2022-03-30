@@ -71,6 +71,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     let process = task.process.upgrade().unwrap();
 
     let tid = task_inner.res.as_ref().unwrap().tid;
+    println!("[exit] tid {}",tid);
     // record exit code
     task_inner.exit_code = Some(exit_code);
     task_inner.res = None;
@@ -81,18 +82,18 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // however, if this is the main thread of current process
     // the process should terminate at once
     if tid == 0 {
-        
         let mut process_inner = process.try_inner_exclusive_access().unwrap();
         // mark this process as a zombie process
         process_inner.is_zombie = true;
         // record exit code of main process
         process_inner.exit_code = exit_code;
-        
+
         {
             // move all child processes under init process
             let mut initproc_inner = INITPROC.try_inner_exclusive_access().unwrap();
             for child in process_inner.children.iter() {
-                child.try_inner_exclusive_access().unwrap().parent = Some(Arc::downgrade(&INITPROC));
+                child.try_inner_exclusive_access().unwrap().parent =
+                    Some(Arc::downgrade(&INITPROC));
                 initproc_inner.children.push(child.clone());
             }
         }
@@ -118,14 +119,13 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 
 lazy_static! {
     pub static ref INITPROC: Arc<ProcessControlBlock> = {
-        let v = include_bytes!("../usertests");
-        // let inode = open_file("usertests", OpenFlags::RDONLY).unwrap();
-        // let v = inode.read_all();
+        // let v = include_bytes!("../usertests");
+        let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
+        let v = inode.read_all();
         ProcessControlBlock::new(v.as_slice())
     };
 }
 
 pub fn add_initproc() {
-    let v = include_bytes!("../usertests");
     let _initproc = INITPROC.clone();
 }

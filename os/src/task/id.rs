@@ -148,13 +148,11 @@ impl TaskUserRes {
     }
 
     pub fn alloc_user_res(&self) {
-        
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.try_inner_exclusive_access().unwrap();
+        let mut process_inner = process.inner_lock_access();
         // alloc user stack
         let ustack_bottom = ustack_bottom_from_tid(self.ustack_base, self.tid);
         let ustack_top = ustack_bottom + USER_STACK_SIZE + 1;
-        trace!("ustack top: {:#x}",ustack_top);
         process_inner.memory_set.insert_framed_area(
             ustack_bottom.into(),
             ustack_top.into(),
@@ -171,7 +169,6 @@ impl TaskUserRes {
     }
 
     fn dealloc_user_res(&self) {
-        
         // dealloc tid
         let process = self.process.upgrade().unwrap();
         let mut process_inner = process.try_inner_exclusive_access().unwrap();
@@ -189,17 +186,16 @@ impl TaskUserRes {
 
     #[allow(unused)]
     pub fn alloc_tid(&mut self) {
-        
         self.tid = self
             .process
             .upgrade()
             .unwrap()
-            .try_inner_exclusive_access().unwrap()
+            .try_inner_exclusive_access()
+            .unwrap()
             .alloc_tid();
     }
 
     pub fn dealloc_tid(&self) {
-        
         let process = self.process.upgrade().unwrap();
         let mut process_inner = process.try_inner_exclusive_access().unwrap();
         process_inner.dealloc_tid(self.tid);

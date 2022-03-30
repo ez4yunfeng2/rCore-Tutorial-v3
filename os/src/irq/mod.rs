@@ -1,6 +1,6 @@
 use crate::{
     drivers::{PlicDevice, BLOCK_DEVICE, PLIC_DRIVE, UART_DEVICE},
-    sync::{SpinMutex, UPSafeCell, intr_on},
+    sync::{intr_on, SpinMutex, UPSafeCell},
     task::{
         add_task, current_hartid, schedule, take_current_task, TaskContext, TaskControlBlock,
         TaskStatus,
@@ -10,7 +10,7 @@ use alloc::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
-use k210_pac::{Interrupt, dmac::channel::ctl::SINC_R};
+use k210_pac::{dmac::channel::ctl::SINC_R, Interrupt};
 use k210_soc::{
     dmac::channel_interrupt_clear,
     plic::{clear_irq, current_irq, plic_enable, set_priority, set_thershold},
@@ -96,14 +96,12 @@ pub fn handler_ext() {
     let mut irq_manager = IRQMANAGER.lock();
     let irq = PLIC_DRIVE.current(current_hartid());
     match irq {
-        0 => {
-            println!("irq 0 hart {}", current_hartid())
-        }
+        0 => {}
         27 => {
             BLOCK_DEVICE.handler_interrupt();
             match irq_manager.dequeue(irq) {
                 Some(task) => add_task(task),
-                None => { },
+                None => {}
             }
         }
         33 => {

@@ -124,7 +124,7 @@ pub fn trap_return() -> ! {
         fn __restore();
     }
     let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
-    
+
     unsafe {
         asm!(
             "fence.i",

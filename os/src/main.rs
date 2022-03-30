@@ -67,15 +67,14 @@ pub fn rust_main(hartid: usize) -> ! {
         fatfs::fs_init();
         task::add_initproc();
         BLOCK_DEVICE.change_mode();
-        // send_ipi(1);
+        send_ipi(1);
     } else {
-        loop {}
-        // mm::activate();
-        // trap::init();
-        // irq::irq_init(hartid);
-        // trap::enable_timer_interrupt();
-        // timer::set_next_trigger();
-        // println!("[kernel] Lotus core {} boot", hartid);
+        mm::activate();
+        trap::init();
+        irq::irq_init(hartid);
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+        println!("[kernel] Lotus core {} boot", hartid);
     }
     task::run_tasks(hartid);
     panic!("Unreachable in rust_main!");
