@@ -1,15 +1,20 @@
 use crate::{
     drivers::{UartDevice, UART_DEVICE},
-    sync::{SpinMutex, UPSafeCell}, task::current_hartid,
+    sync::{SpinMutex, UPSafeCell},
+    task::current_hartid,
 };
 use alloc::sync::Arc;
-use core::fmt::{self, Write};
+use core::fmt::{self, Debug, Write};
 use lazy_static::lazy_static;
 use log::{Level, LevelFilter, Log, Metadata, Record};
 struct Stdout(Arc<dyn UartDevice>);
-lazy_static!(
-    static ref STDOUT: SpinMutex<Stdout> = SpinMutex::new(Stdout(UART_DEVICE.clone()));
-);
+lazy_static! ( static ref STDOUT: SpinMutex<Stdout> = SpinMutex::new(Stdout(UART_DEVICE.clone())); );
+
+impl Debug for Stdout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("stdout")
+    }
+}
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
@@ -21,7 +26,7 @@ impl Write for Stdout {
 }
 
 pub fn print(args: fmt::Arguments) {
-    let mut stdout = STDOUT.lock();
+    let mut stdout = STDOUT.lock().unwrap();
     stdout.write_fmt(args).unwrap();
 }
 

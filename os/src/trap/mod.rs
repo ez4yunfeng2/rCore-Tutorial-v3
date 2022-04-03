@@ -154,7 +154,7 @@ pub fn trap_from_kernel() {
             if current_hartid() == 0 {
                 check_timer();
             }
-            // suspend_current_and_run_next();
+            suspend_current_and_run_next();
         }
         Trap::Interrupt(_) => todo!(),
         Trap::Exception(_) => {

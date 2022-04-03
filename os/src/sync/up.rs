@@ -1,7 +1,5 @@
 use core::cell::{BorrowMutError, RefCell, RefMut};
 
-use super::spin::{pop_off, push_off};
-
 /// Wrap a static data structure inside it so that we are
 /// able to access it without any `unsafe`.
 ///

@@ -1,13 +1,13 @@
 use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
-use crate::sync::{SpinMutex, SpinMutexGuard};
+use crate::sync::{SpinMutex, SpinMutexGuard, LockError};
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
+use core::fmt::Debug;
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
-
 pub struct TaskControlBlock {
     // immutable
     pub process: Weak<ProcessControlBlock>,
@@ -17,17 +17,16 @@ pub struct TaskControlBlock {
 }
 
 impl TaskControlBlock {
-    pub fn inner_lock_access(&self) -> SpinMutexGuard<'_, TaskControlBlockInner> {
+    pub fn inner_lock_access(&self) -> Result<SpinMutexGuard<'_, TaskControlBlockInner>, LockError> {
         self.inner.lock()
     }
 
     pub fn get_user_token(&self) -> usize {
         let process = self.process.upgrade().unwrap();
-        let inner = process.inner_lock_access();
+        let inner = process.inner_lock_access().unwrap();
         inner.memory_set.token()
     }
 }
-
 pub struct TaskControlBlockInner {
     pub ticks: usize,
     pub times: Tms,
@@ -113,5 +112,17 @@ impl Deref for Tms {
 impl DerefMut for Tms {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self
+    }
+}
+
+impl Debug for TaskControlBlock {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("taskcb")
+    }
+}
+
+impl Debug for TaskControlBlockInner {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("taskcbinner")
     }
 }

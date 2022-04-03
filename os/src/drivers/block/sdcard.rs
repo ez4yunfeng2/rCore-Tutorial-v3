@@ -19,7 +19,8 @@ use lazy_static::*;
 use log::{error, info};
 use riscv::register::sstatus;
 
-static mut DMA_CHUNK: [u32; 512] = [0; 512];
+static mut DMA_READ_CHUNK: [u32; 512] = [0; 512];
+static mut DMA_WRITE_CHUNK: [u32; 512] = [0; 512];
 
 pub struct SDCard<SPI> {
     spi: SPI,
@@ -644,23 +645,20 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             true
         };
 
-        let response = self.get_response();
-        if response != 0x00 {
-            println!("Error sector: {} {}", sector, response);
-            self.end_cmd();
-            return Err(response);
+        if self.get_response() != 0x00 {
+            return Err(0);
         }
         let mut error = false;
 
-        let mut dma_chunk = [0u32; SEC_LEN];
+        // let mut dma_chunk = [0u32; SEC_LEN];
         for chunk in data_buf.chunks_mut(SEC_LEN) {
             if self.get_response() != SD_START_DATA_SINGLE_BLOCK_READ {
                 error = true;
                 break;
             }
             unsafe {
-                self.read_data_dma(&mut DMA_CHUNK);
-                for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/ DMA_CHUNK.iter()) {
+                self.read_data_dma(&mut DMA_READ_CHUNK);
+                for (a, b) in chunk.iter_mut().zip(/*dma_chunk*/ DMA_READ_CHUNK.iter()) {
                     *a = (b & 0xff) as u8;
                 }
             }
@@ -767,8 +765,10 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             return Err(());
         }
 
-        let mut dma_chunk = [0u32; SEC_LEN];
+        // let mut dma_chunk = [0u32; SEC_LEN];
+        let mut dma_chunk = unsafe{ DMA_WRITE_CHUNK };
         for chunk in data_buf.chunks(SEC_LEN) {
+            
             /* Send the data token to signify the start of the data */
             self.write_data(&frame);
             /* Write the block data to SD : write count data by block */
@@ -784,7 +784,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
                 return Err(());
             }
         }
-
+        
         self.end_cmd();
         self.end_cmd();
         Ok(())

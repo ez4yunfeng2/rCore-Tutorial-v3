@@ -66,13 +66,14 @@ pub fn run_tasks(hartid: usize) {
         let mut processor = current_processor().unwrap();
         intr_on();
         if let Some(task) = fetch_task() {
-            let mut task_inner = task.inner_lock_access();
+            intr_check!();
+            let mut task_inner = task.inner_lock_access().unwrap();
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
             drop(task_inner);
-            processor.current = Some(task);
             intr_check!();
+            processor.current = Some(task);
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
@@ -105,13 +106,14 @@ pub fn current_user_token() -> usize {
 }
 
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task().unwrap().inner_lock_access().get_trap_cx()
+    current_task().unwrap().inner_lock_access().unwrap().get_trap_cx()
 }
 
 pub fn current_trap_cx_user_va() -> usize {
     current_task()
         .unwrap()
         .inner_lock_access()
+        .unwrap()
         .res
         .as_ref()
         .unwrap()
@@ -123,11 +125,11 @@ pub fn current_kstack_top() -> usize {
 }
 
 pub fn enter_kernel() {
-    current_task().unwrap().inner_lock_access().enter_kernel();
+    current_task().unwrap().inner_lock_access().unwrap().enter_kernel();
 }
 
 pub fn exit_kernel() {
-    current_task().unwrap().inner_lock_access().exit_kernel();
+    current_task().unwrap().inner_lock_access().unwrap().exit_kernel();
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {

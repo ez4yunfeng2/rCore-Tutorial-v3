@@ -176,6 +176,7 @@ impl BlkManager {
             blocks: BTreeMap::new(),
         }
     }
+
     pub fn read_block_from_disk(&mut self, blk_id: usize) {
         let mut buf = [0; 512];
         self.driver.read_block(blk_id, &mut buf);
@@ -187,6 +188,7 @@ impl BlkManager {
         };
         self.blocks.insert(blk_id, blk);
     }
+
     pub fn write_block_to_disk(&mut self, blk_id: usize) {
         let mut blk = self.blocks.get_mut(&blk_id).unwrap();
         self.driver.write_block(blk_id, &mut blk.cache);
@@ -214,6 +216,7 @@ impl BlkManager {
         };
         func.call_once((blk, buf))
     }
+
     pub fn write_block(
         &mut self,
         blk_id: usize,

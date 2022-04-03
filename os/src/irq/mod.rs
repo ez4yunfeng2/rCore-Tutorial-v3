@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use crate::{
     drivers::{PlicDevice, BLOCK_DEVICE, PLIC_DRIVE, UART_DEVICE},
     sync::{intr_on, SpinMutex, UPSafeCell},
@@ -66,7 +68,7 @@ impl IrqManager {
 
 pub fn irq_init(hartid: usize) {
     unsafe {
-        let mut irq_manager = IRQMANAGER.lock();
+        let mut irq_manager = IRQMANAGER.lock().unwrap();
         sie::set_ssoft();
         irq_manager.set_thershold(0, hartid);
         irq_manager.register_irq(Interrupt::DMA0, hartid);
@@ -77,9 +79,9 @@ pub fn irq_init(hartid: usize) {
 #[no_mangle]
 pub fn wait_for_irq_and_run_next(irq: usize) {
     intr_check!();
-    let mut irq_manager = IRQMANAGER.lock();
+    let mut irq_manager = IRQMANAGER.lock().unwrap();
     if let Some(task) = take_current_task() {
-        let mut task_inner = task.inner_lock_access();
+        let mut task_inner = task.inner_lock_access().unwrap();
         task_inner.task_status = TaskStatus::Waiting;
         let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
         drop(task_inner);
@@ -93,7 +95,7 @@ pub fn wait_for_irq_and_run_next(irq: usize) {
 
 pub fn handler_ext() {
     intr_check!();
-    let mut irq_manager = IRQMANAGER.lock();
+    let mut irq_manager = IRQMANAGER.lock().unwrap();
     let irq = PLIC_DRIVE.current(current_hartid());
     match irq {
         0 => {}
@@ -117,5 +119,11 @@ pub fn handler_ext() {
     }
     if irq != 0 {
         irq_manager.clear(irq, current_hartid());
+    }
+}
+
+impl Debug for IrqManager {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("irqmanager")
     }
 }

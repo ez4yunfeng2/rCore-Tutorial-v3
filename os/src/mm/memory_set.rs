@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
@@ -29,7 +31,7 @@ lazy_static! {
 }
 
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.lock().token()
+    KERNEL_SPACE.lock().unwrap().token()
 }
 
 pub struct MemorySet {
@@ -212,7 +214,6 @@ impl MemorySet {
         let mut user_stack_base: usize = max_end_va.into();
         user_stack_base += 2 * PAGE_SIZE;
 
-        println!("ustack {:#x}", user_stack_base);
         (
             memory_set,
             user_stack_base,
@@ -385,7 +386,7 @@ bitflags! {
 
 #[allow(unused)]
 pub fn remap_test() {
-    let mut kernel_space = KERNEL_SPACE.lock();
+    let mut kernel_space = KERNEL_SPACE.lock().unwrap();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
@@ -414,4 +415,10 @@ pub fn remap_test() {
         false,
     );
     println!("remap_test passed!");
+}
+
+impl Debug for MemorySet {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("memory set")
+    }
 }

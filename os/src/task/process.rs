@@ -1,4 +1,5 @@
 use core::cell::{BorrowMutError, RefMut};
+use core::fmt::Debug;
 
 use super::add_task;
 use super::id::RecycleAllocator;
@@ -6,13 +7,12 @@ use super::TaskControlBlock;
 use super::{pid_alloc, PidHandle};
 use crate::fs::{root, File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
-use crate::sync::{Mutex, Semaphore, SpinMutex, SpinMutexGuard, UPSafeCell};
+use crate::sync::{Mutex, Semaphore, SpinMutex, SpinMutexGuard, UPSafeCell, LockError};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-
 pub struct ProcessControlBlock {
     // immutable
     pub pid: PidHandle,
@@ -74,13 +74,11 @@ impl ProcessControlBlock {
     //     self.inner.try_exclusive_access()
     // }
 
-    pub fn try_inner_exclusive_access(
-        &self,
-    ) -> Option<SpinMutexGuard<ProcessControlBlockInner>> {
+    pub fn try_inner_exclusive_access(&self) -> Result<SpinMutexGuard<ProcessControlBlockInner>,LockError> {
         self.inner.try_lock()
     }
 
-    pub fn inner_lock_access(&self) -> SpinMutexGuard<ProcessControlBlockInner>{
+    pub fn inner_lock_access(&self) -> Result<SpinMutexGuard<ProcessControlBlockInner>,LockError> {
         self.inner.lock()
     }
 
@@ -96,20 +94,19 @@ impl ProcessControlBlock {
         btree.insert(2, Some(Arc::new(Stdout)));
         let process = Arc::new(Self {
             pid: pid_handle,
-            inner: 
-                SpinMutex::new(ProcessControlBlockInner {
-                    is_zombie: false,
-                    memory_set,
-                    parent: None,
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: btree,
-                    tasks: Vec::new(),
-                    task_res_allocator: RecycleAllocator::new(),
-                    mutex_list: Vec::new(),
-                    semaphore_list: Vec::new(),
-                    dir_entry: Some(root()),
-                }),
+            inner: SpinMutex::new(ProcessControlBlockInner {
+                is_zombie: false,
+                memory_set,
+                parent: None,
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: btree,
+                tasks: Vec::new(),
+                task_res_allocator: RecycleAllocator::new(),
+                mutex_list: Vec::new(),
+                semaphore_list: Vec::new(),
+                dir_entry: Some(root()),
+            }),
         });
         // create a main thread, we should allocate ustack and trap_cx here
         let task = Arc::new(TaskControlBlock::new(
@@ -118,7 +115,7 @@ impl ProcessControlBlock {
             true,
         ));
         // prepare trap_cx of main thread
-        let task_inner = task.inner_lock_access();
+        let task_inner = task.inner_lock_access().unwrap();
         let trap_cx = task_inner.get_trap_cx();
         let ustack_top = task_inner.res.as_ref().unwrap().ustack_top();
         let kstack_top = task.kstack.get_top();
@@ -126,12 +123,12 @@ impl ProcessControlBlock {
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             ustack_top,
-            KERNEL_SPACE.lock().token(),
+            KERNEL_SPACE.lock().unwrap().token(),
             kstack_top,
             trap_handler as usize,
         );
         // add main thread to the process
-        let mut process_inner = process.try_inner_exclusive_access().unwrap();
+        let mut process_inner = process.inner_lock_access().unwrap();
         process_inner.tasks.push(Some(Arc::clone(&task)));
         drop(process_inner);
         // add main thread to scheduler
@@ -141,16 +138,16 @@ impl ProcessControlBlock {
 
     /// Only support processes with a single thread.
     pub fn exec(self: &Arc<Self>, elf_data: &[u8], args: Vec<String>) {
-        assert_eq!(self.try_inner_exclusive_access().unwrap().thread_count(), 1);
+        assert_eq!(self.inner_lock_access().unwrap().thread_count(), 1);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
         let new_token = memory_set.token();
         // substitute memory_set
-        self.try_inner_exclusive_access().unwrap().memory_set = memory_set;
+        self.inner_lock_access().unwrap().memory_set = memory_set;
         // then we alloc user resource for main thread again
         // since memory_set has been changed
-        let task = self.try_inner_exclusive_access().unwrap().get_task(0);
-        let mut task_inner = task.inner_lock_access();
+        let task = self.inner_lock_access().unwrap().get_task(0);
+        let mut task_inner = task.inner_lock_access().unwrap();
         task_inner.res.as_mut().unwrap().ustack_base = ustack_base;
         task_inner.res.as_mut().unwrap().brk_addr = ustack_base - 4096;
         task_inner.res.as_mut().unwrap().alloc_user_res();
@@ -184,7 +181,7 @@ impl ProcessControlBlock {
         let mut trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.lock().token(),
+            KERNEL_SPACE.lock().unwrap().token(),
             task.kstack.get_top(),
             trap_handler as usize,
         );
@@ -195,7 +192,7 @@ impl ProcessControlBlock {
 
     /// Only support processes with a single thread.
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
-        let mut parent = self.inner_lock_access();
+        let mut parent = self.inner_lock_access().unwrap();
         assert_eq!(parent.thread_count(), 1);
         // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
         let memory_set = MemorySet::from_existed_user(&parent.memory_set);
@@ -214,18 +211,18 @@ impl ProcessControlBlock {
         let child = Arc::new(Self {
             pid,
             inner: SpinMutex::new(ProcessControlBlockInner {
-                    is_zombie: false,
-                    memory_set,
-                    parent: Some(Arc::downgrade(self)),
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: btree,
-                    tasks: Vec::new(),
-                    task_res_allocator: RecycleAllocator::new(),
-                    mutex_list: Vec::new(),
-                    semaphore_list: Vec::new(),
-                    dir_entry: parent.dir_entry.clone(),
-                }),
+                is_zombie: false,
+                memory_set,
+                parent: Some(Arc::downgrade(self)),
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: btree,
+                tasks: Vec::new(),
+                task_res_allocator: RecycleAllocator::new(),
+                mutex_list: Vec::new(),
+                semaphore_list: Vec::new(),
+                dir_entry: parent.dir_entry.clone(),
+            }),
         });
         // add child
         parent.children.push(Arc::clone(&child));
@@ -235,6 +232,7 @@ impl ProcessControlBlock {
             parent
                 .get_task(0)
                 .inner_lock_access()
+                .unwrap()
                 .res
                 .as_ref()
                 .unwrap()
@@ -249,7 +247,7 @@ impl ProcessControlBlock {
         child_inner.tasks.push(Some(Arc::clone(&task)));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
-        let task_inner = task.inner_lock_access();
+        let task_inner = task.inner_lock_access().unwrap();
         let trap_cx = task_inner.get_trap_cx();
         trap_cx.kernel_sp = task.kstack.get_top();
         drop(task_inner);
@@ -263,13 +261,24 @@ impl ProcessControlBlock {
     }
 
     pub fn getppid(&self) -> usize {
-        self.try_inner_exclusive_access()
-            .unwrap()
+        self.inner_lock_access().unwrap()
             .parent
             .as_ref()
             .unwrap()
             .upgrade()
             .unwrap()
             .getpid()
+    }
+}
+
+impl Debug for ProcessControlBlock {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("process")
+    }
+}
+
+impl Debug for ProcessControlBlockInner {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("process inner")
     }
 }

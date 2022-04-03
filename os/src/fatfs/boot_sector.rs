@@ -148,11 +148,9 @@ impl BiosParameterBlock {
         u32::from(self.fs_info_sector)
     }
     pub fn bytes_from_sectors(&self, sectors: u32) -> u64 {
-        // Note: total number of sectors is a 32 bit number so offsets have to be 64 bit
         u64::from(sectors) * u64::from(self.bytes_per_sector)
     }
     pub fn sectors_from_clusters(&self, clusters: u32) -> u32 {
-        // Note: total number of sectors is a 32 bit number so it should not overflow
         clusters * u32::from(self.sectors_per_cluster)
     }
     pub fn cluster_size(&self) -> u32 {
@@ -162,7 +160,6 @@ impl BiosParameterBlock {
         self.extended_flags & 0x80 == 0
     }
     pub fn active_fat(&self) -> u16 {
-        // The zero-based number of the active FAT is only valid if mirroring is disabled.
         if self.mirroring_enabled() {
             0
         } else {

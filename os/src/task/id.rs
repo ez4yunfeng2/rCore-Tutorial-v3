@@ -10,7 +10,7 @@ use alloc::{
 use k210_hal::cache::Uncache;
 use lazy_static::*;
 use log::trace;
-
+#[derive(Debug)]
 pub struct RecycleAllocator {
     current: usize,
     recycled: Vec<usize>,
@@ -47,19 +47,19 @@ lazy_static! {
     static ref KSTACK_ALLOCATOR: SpinMutex<RecycleAllocator> =
         SpinMutex::new(RecycleAllocator::new());
 }
-
+#[derive(Debug)]
 pub struct PidHandle(pub usize);
 
 pub fn pid_alloc() -> PidHandle {
     // PidHandle(PID_ALLOCATOR.lock().alloc())
-    let mut pid = PID_ALLOCATOR.lock();
+    let mut pid = PID_ALLOCATOR.lock().unwrap();
     let pid = pid.alloc();
     PidHandle(pid)
 }
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        PID_ALLOCATOR.lock().dealloc(self.0);
+        PID_ALLOCATOR.lock().unwrap().dealloc(self.0);
     }
 }
 
@@ -73,9 +73,9 @@ pub fn kernel_stack_position(kstack_id: usize) -> (usize, usize) {
 pub struct KernelStack(pub usize);
 
 pub fn kstack_alloc() -> KernelStack {
-    let kstack_id = KSTACK_ALLOCATOR.lock().alloc();
+    let kstack_id = KSTACK_ALLOCATOR.lock().unwrap().alloc();
     let (kstack_bottom, kstack_top) = kernel_stack_position(kstack_id);
-    KERNEL_SPACE.lock().insert_framed_area(
+    KERNEL_SPACE.lock().unwrap().insert_framed_area(
         kstack_bottom.into(),
         kstack_top.into(),
         MapPermission::R | MapPermission::W,
@@ -88,7 +88,7 @@ impl Drop for KernelStack {
         let (kernel_stack_bottom, _) = kernel_stack_position(self.0);
         let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
         KERNEL_SPACE
-            .lock()
+            .lock().unwrap()
             .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
 }
@@ -133,7 +133,7 @@ impl TaskUserRes {
         ustack_base: usize,
         alloc_user_res: bool,
     ) -> Self {
-        let tid = process.try_inner_exclusive_access().unwrap().alloc_tid();
+        let tid = process.inner_lock_access().unwrap().alloc_tid();
 
         let task_user_res = Self {
             tid,
@@ -149,7 +149,7 @@ impl TaskUserRes {
 
     pub fn alloc_user_res(&self) {
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.inner_lock_access();
+        let mut process_inner = process.inner_lock_access().unwrap();
         // alloc user stack
         let ustack_bottom = ustack_bottom_from_tid(self.ustack_base, self.tid);
         let ustack_top = ustack_bottom + USER_STACK_SIZE + 1;
@@ -171,7 +171,7 @@ impl TaskUserRes {
     fn dealloc_user_res(&self) {
         // dealloc tid
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.try_inner_exclusive_access().unwrap();
+        let mut process_inner = process.inner_lock_access().unwrap();
         // dealloc ustack manually
         let ustack_bottom_va: VirtAddr = ustack_bottom_from_tid(self.ustack_base, self.tid).into();
         process_inner
@@ -190,14 +190,14 @@ impl TaskUserRes {
             .process
             .upgrade()
             .unwrap()
-            .try_inner_exclusive_access()
+            .inner_lock_access()
             .unwrap()
             .alloc_tid();
     }
 
     pub fn dealloc_tid(&self) {
         let process = self.process.upgrade().unwrap();
-        let mut process_inner = process.try_inner_exclusive_access().unwrap();
+        let mut process_inner = process.inner_lock_access().unwrap();
         process_inner.dealloc_tid(self.tid);
     }
 
@@ -207,7 +207,7 @@ impl TaskUserRes {
 
     pub fn trap_cx_ppn(&self) -> PhysPageNum {
         let process = self.process.upgrade().unwrap();
-        let process_inner = process.try_inner_exclusive_access().unwrap();
+        let process_inner = process.inner_lock_access().unwrap();
         let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_tid(self.tid).into();
         process_inner
             .memory_set

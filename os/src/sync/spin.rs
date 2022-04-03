@@ -1,14 +1,25 @@
-use core::sync::atomic::{compiler_fence, fence, AtomicI8, AtomicIsize, AtomicUsize};
 #[allow(unused)]
 use core::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
 };
-
+use core::{
+    fmt::Debug,
+    sync::atomic::{compiler_fence, fence, AtomicI8, AtomicIsize, AtomicUsize},
+};
 use riscv::register::sstatus;
 
 use crate::task::{current_hartid, current_processor};
+#[derive(Debug)]
+pub enum LockError {
+    Release,
+    Hold,
+    UnknowProc,
+    Interruptible,
+    LockFail,
+    Unknow
+}
 
 pub struct SpinMutex<T: ?Sized> {
     pub(crate) lock: AtomicBool,
@@ -18,7 +29,8 @@ pub struct SpinMutex<T: ?Sized> {
 
 unsafe impl<T> Sync for SpinMutex<T> {}
 unsafe impl<T> Send for SpinMutex<T> {}
-pub struct SpinMutexGuard<'a, T: ?Sized + 'a> {
+#[derive(Debug)]
+pub struct SpinMutexGuard<'a, T: Debug + ?Sized + 'a> {
     lock: &'a AtomicBool,
     cpu: &'a AtomicIsize,
     data: &'a mut T,
@@ -35,7 +47,8 @@ impl<T> SpinMutex<T> {
     }
 }
 
-impl<T: ?Sized> SpinMutex<T> {
+impl<T: ?Sized + Debug> SpinMutex<T> {
+
     #[inline(always)]
     pub fn is_locked(&self) -> bool {
         self.lock.load(Ordering::Relaxed)
@@ -46,48 +59,54 @@ impl<T: ?Sized> SpinMutex<T> {
             && self.cpu.load(Ordering::Relaxed) == current_hartid() as isize
     }
 
+    pub fn check_cpu(&self) -> bool {
+        self.cpu.load(Ordering::Relaxed) == current_hartid() as isize
+    }
+
+    pub fn check_hold(&self) -> bool {
+        self.lock.load(Ordering::Relaxed)
+    }
+
     #[inline(always)]
-    pub fn lock(&self) -> SpinMutexGuard<T> {
-        push_off();
-        if self.holding() {
-            panic!("acquire")
+    pub fn lock(&self) -> Result<SpinMutexGuard<T>, LockError> {
+        intr_off();
+        if self.check_cpu() {
+            return Err(LockError::UnknowProc);
         }
-        let mut timeout = 0x0usize;
+        if self.check_hold() {
+            return Err(LockError::Hold);
+        }
         while self
             .lock
             .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            while self.is_locked() {
-                timeout+=1;
-                if timeout >= 0xFFFFFF{
-                    panic!("lock timeout")
-                }
-            }
+            while self.is_locked() {}
         }
         self.cpu.swap(current_hartid() as isize, Ordering::Relaxed);
-        SpinMutexGuard {
+        Ok(SpinMutexGuard {
             lock: &self.lock,
             cpu: &self.cpu,
             data: unsafe { &mut *self.data.get() },
-        }
+        })
     }
 
     #[inline(always)]
-    pub fn try_lock(&self) -> Option<SpinMutexGuard<T>> {
-        push_off();
-        if self.holding() {
-           panic!("acquire")
-        }
-        if self.lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+    pub fn try_lock(&self) -> Result<SpinMutexGuard<T>, LockError> {
+        intr_off();
+        if self
+            .lock
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
             self.cpu.swap(current_hartid() as isize, Ordering::Relaxed);
-            Some(SpinMutexGuard {
+            Ok(SpinMutexGuard {
                 lock: &self.lock,
                 cpu: &self.cpu,
                 data: unsafe { &mut *self.data.get() },
             })
         } else {
-            None
+            Err(LockError::LockFail)
         }
     }
 }
@@ -98,34 +117,44 @@ impl<T> From<T> for SpinMutex<T> {
     }
 }
 
-impl<'a, T: ?Sized> Deref for SpinMutexGuard<'a, T> {
+impl<'a, T: ?Sized + Debug> Deref for SpinMutexGuard<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
         self.data
     }
 }
 
-impl<'a, T: ?Sized> DerefMut for SpinMutexGuard<'a, T> {
+impl<'a, T: ?Sized + Debug> DerefMut for SpinMutexGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
         self.data
     }
 }
 
-impl<'a, T: ?Sized> Drop for SpinMutexGuard<'a, T> {
+impl<'a, T: ?Sized + Debug> Drop for SpinMutexGuard<'a, T> {
     fn drop(&mut self) {
-        if !self.holding() {
-            panic!("release")
+        if !self.check_cpu() {
+            panic!("release wrong cpu {}",self.cpu.load(Ordering::Relaxed))
+        }
+        if !self.check_hold() {
+            panic!("release no hold")
         }
         self.cpu.store(-1, Ordering::Release);
         self.lock.store(false, Ordering::Release);
-        pop_off();
+        // pop_off().unwrap();
     }
 }
 
-impl<'a, T: ?Sized> SpinMutexGuard<'a, T> {
+impl<'a, T: ?Sized + Debug> SpinMutexGuard<'a, T> {
     pub fn holding(&self) -> bool {
         self.lock.load(Ordering::Relaxed)
             && self.cpu.load(Ordering::Relaxed) == current_hartid() as isize
+    }
+    pub fn check_cpu(&self) -> bool {
+        self.cpu.load(Ordering::Relaxed) == current_hartid() as isize
+    }
+
+    pub fn check_hold(&self) -> bool {
+        self.lock.load(Ordering::Relaxed)
     }
 }
 
@@ -140,30 +169,5 @@ pub fn intr_on() {
 pub fn intr_off() {
     unsafe {
         sstatus::clear_sie();
-    }
-}
-
-pub fn push_off() {
-    intr_off();
-    let processor = current_processor().unwrap();
-    let old = sstatus::read().sie();
-    if processor.noff == 0 {
-        processor.intena = old
-    }
-    processor.noff += 1;
-}
-
-pub fn pop_off() {
-    let processor = current_processor().unwrap();
-    if sstatus::read().sie() {
-        panic!("pop_off - interruptible")
-    }
-    if processor.noff < 1 {
-        println!("pop_off {} {}", processor.noff < 1, processor.noff);
-        panic!("pop_off")
-    }
-    processor.noff -= 1;
-    if processor.noff == 0 && processor.intena {
-        intr_on()
     }
 }

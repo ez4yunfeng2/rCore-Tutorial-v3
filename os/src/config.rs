@@ -57,6 +57,6 @@ pub const MMIO: &[(usize, usize)] = &[
 
 macro_rules! intr_check {
     () => {
-        debug_assert_eq!(sstatus::read().sie(), false, "sie enable")
+        debug_assert_eq!(riscv::register::sstatus::read().sie(), false, "sie enable")
     };
 }

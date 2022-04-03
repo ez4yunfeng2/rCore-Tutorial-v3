@@ -11,12 +11,12 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     // create a new thread
     let new_task = Arc::new(TaskControlBlock::new(
         Arc::clone(&process),
-        task.inner_lock_access().res.as_ref().unwrap().ustack_base,
+        task.inner_lock_access().unwrap().res.as_ref().unwrap().ustack_base,
         true,
     ));
     // add new task to scheduler
     add_task(Arc::clone(&new_task));
-    let new_task_inner = new_task.inner_lock_access();
+    let new_task_inner = new_task.inner_lock_access().unwrap();
     let new_task_res = new_task_inner.res.as_ref().unwrap();
     let new_task_tid = new_task_res.tid;
     let mut process_inner = process.try_inner_exclusive_access().unwrap();
@@ -42,6 +42,7 @@ pub fn sys_gettid() -> isize {
     current_task()
         .unwrap()
         .inner_lock_access()
+        .unwrap()
         .res
         .as_ref()
         .unwrap()
@@ -54,7 +55,7 @@ pub fn sys_gettid() -> isize {
 pub fn sys_waittid(tid: usize) -> i32 {
     let task = current_task().unwrap();
     let process = task.process.upgrade().unwrap();
-    let task_inner = task.inner_lock_access();
+    let task_inner = task.inner_lock_access().unwrap();
     let mut process_inner = process.try_inner_exclusive_access().unwrap();
     // a thread cannot wait for itself
     if task_inner.res.as_ref().unwrap().tid == tid {
@@ -63,7 +64,7 @@ pub fn sys_waittid(tid: usize) -> i32 {
     let mut exit_code: Option<i32> = None;
     let waited_task = process_inner.tasks[tid].as_ref();
     if let Some(waited_task) = waited_task {
-        if let Some(waited_exit_code) = waited_task.inner_lock_access().exit_code {
+        if let Some(waited_exit_code) = waited_task.inner_lock_access().unwrap().exit_code {
             exit_code = Some(waited_exit_code);
         }
     } else {

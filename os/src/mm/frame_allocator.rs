@@ -93,7 +93,7 @@ pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
-    FRAME_ALLOCATOR.lock().init(
+    FRAME_ALLOCATOR.lock().unwrap().init(
         PhysAddr::from(ekernel as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor(),
     );
@@ -102,12 +102,13 @@ pub fn init_frame_allocator() {
 pub fn frame_alloc() -> Option<FrameTracker> {
     FRAME_ALLOCATOR
         .lock()
+        .unwrap()
         .alloc()
         .map(|ppn| FrameTracker::new(ppn))
 }
 
 pub fn frame_dealloc(ppn: PhysPageNum) {
-    FRAME_ALLOCATOR.lock().dealloc(ppn);
+    FRAME_ALLOCATOR.lock().unwrap().dealloc(ppn);
 }
 
 #[allow(unused)]
@@ -126,4 +127,10 @@ pub fn frame_allocator_test() {
     }
     drop(v);
     println!("frame_allocator_test passed!");
+}
+
+impl Debug for StackFrameAllocator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("stackframealloc")
+    }
 }

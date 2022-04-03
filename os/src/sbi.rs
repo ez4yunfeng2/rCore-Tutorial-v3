@@ -46,11 +46,6 @@ pub fn send_ipi(hartid: usize) {
     sbi_call(LEGACY_SEND_IPI, &hartid_mask as *const usize as usize, 0, 0);
 }
 
-// #[inline]
-// pub fn sbi_rustsbi_k210_sext() {
-//     sbi_call(0x0A000004, handler_ext as usize, 0, 0);
-// }
-
 pub fn sbi_smext_stimer() {
     sbi_call(1225, 0, 0, 0);
 }

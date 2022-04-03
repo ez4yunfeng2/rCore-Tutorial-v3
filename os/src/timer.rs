@@ -31,7 +31,7 @@ pub fn get_time_usec() -> usize {
 pub fn set_next_trigger() {
     set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);
 }
-
+#[derive(Debug)]
 pub struct TimerCondVar {
     pub expire_ms: usize,
     pub task: Arc<TaskControlBlock>,
@@ -63,13 +63,13 @@ lazy_static! {
 }
 
 pub fn add_timer(expire_ms: usize, task: Arc<TaskControlBlock>) {
-    let mut timers = TIMERS.lock();
+    let mut timers = TIMERS.lock().unwrap();
     timers.push(TimerCondVar { expire_ms, task });
 }
 
 pub fn check_timer() {
     let current_ms = get_time_ms();
-    let mut timers = TIMERS.lock();
+    let mut timers = TIMERS.lock().unwrap();
     while let Some(timer) = timers.peek() {
         if timer.expire_ms <= current_ms {
             add_task(Arc::clone(&timer.task));

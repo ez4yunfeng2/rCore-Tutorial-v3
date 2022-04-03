@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use crate::sync::{SpinMutex, UPSafeCell};
 
 use super::TaskControlBlock;
@@ -29,9 +31,15 @@ lazy_static! {
 }
 
 pub fn add_task(task: Arc<TaskControlBlock>) {
-    TASK_MANAGER.lock().add(task);
+    TASK_MANAGER.lock().unwrap().add(task);
 }
 
 pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
-    TASK_MANAGER.lock().fetch()
+    TASK_MANAGER.lock().unwrap().fetch()
+}
+
+impl Debug for TaskManager {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("TaskManager")
+    }
 }
