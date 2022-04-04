@@ -29,7 +29,6 @@ pub fn sys_getppid() -> isize {
 }
 
 pub fn sys_fork() -> isize {
-    // println!("sys_fork1");
     println!("[info] fork");
     let current_process = current_process();
     let new_process = current_process.fork();

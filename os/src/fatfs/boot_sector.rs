@@ -131,6 +131,7 @@ impl BiosParameterBlock {
         let fat_sectors = self.sectors_per_all_fats();
         self.reserved_sectors() + fat_sectors + root_dir_sectors
     }
+
     pub fn total_sectors(&self) -> u32 {
         if self.total_sectors_16 == 0 {
             self.total_sectors_32
@@ -138,6 +139,7 @@ impl BiosParameterBlock {
             u32::from(self.total_sectors_16)
         }
     }
+    
     pub fn total_clusters(&self) -> u32 {
         let total_sectors = self.total_sectors();
         let first_data_sector = self.first_data_sector();

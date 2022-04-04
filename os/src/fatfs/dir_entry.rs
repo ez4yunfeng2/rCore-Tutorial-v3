@@ -519,8 +519,10 @@ impl DirEntry {
         short_name: &[u8; SFN_SIZE],
     ) -> Result<(BlkCacheManager, u64), Error<()>> {
         let lfn_chsum = lfn_checksum(short_name);
+        let a = lfn_utf16.as_ucs2_units();
         let lfn_iter = LfnEntriesGenerator::new(lfn_utf16.as_ucs2_units(), lfn_chsum);
         let num_entries = lfn_iter.len() as u32 + 1;
+        
         self.seek(SeekFrom::Start(0)).unwrap();
         let mut stream = self.find_free_entries(num_entries)?;
         let start_pos = stream.seek(io::SeekFrom::Current(0))?;
@@ -770,6 +772,7 @@ impl DirEntry {
     }
 
     pub fn is_empty(&mut self) -> bool {
+        self.seek(SeekFrom::Current(0)).unwrap();
         for r in self {
             let name = r.short_file_name_as_bytes();
             if name != b"." && name != b".." {
